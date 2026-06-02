@@ -1,0 +1,24 @@
+[
+  {
+    "_comment": "Refine expected_chunk_paths after a real Voyage index build over your local kb/.",
+    "id": "resume-background",
+    "query": "Summarize Bryan's employment history and education.",
+    "expected_chunk_paths": ["resume/resume.md"],
+    "ground_truth_answer": "Grounded summary from resume/resume.md covering roles, skills, and education.",
+    "criteria": ["uses resume", "no invented employers"]
+  },
+  {
+    "id": "shuttrr-project",
+    "query": "Tell me about the Shuttrr photography automation project.",
+    "expected_chunk_paths": ["projects/shuttrr.md"],
+    "ground_truth_answer": "Project pitch and technical notes from projects/shuttrr.md.",
+    "criteria": ["Shuttrr project file"]
+  },
+  {
+    "id": "agent-experience",
+    "query": "Has Bryan built agentic AI or tool-using assistants?",
+    "expected_chunk_paths": ["projects/strauss.md", "meta/quick_facts.md"],
+    "ground_truth_answer": "Evidence from portfolio project notes about agent frameworks and tool loops.",
+    "criteria": ["agent/tooling experience"]
+  }
+]

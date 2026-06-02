@@ -1,0 +1,37 @@
+[
+  {
+    "id": "hours-weekday",
+    "query": "What time does Easy Coffee open on weekdays?",
+    "expected_chunk_paths": ["hours.md"],
+    "ground_truth_answer": "Easy Coffee opens at 6:30 AM Monday through Friday and closes at 6:00 PM.",
+    "criteria": ["mentions 6:30 AM weekday open", "cites hours.md"]
+  },
+  {
+    "id": "oat-milk",
+    "query": "Do you have oat milk and is there an extra charge?",
+    "expected_chunk_paths": ["faq.md"],
+    "ground_truth_answer": "Yes, oat milk is available with no upcharge for non-dairy milk.",
+    "criteria": ["confirms oat milk", "no upcharge"]
+  },
+  {
+    "id": "latte-price",
+    "query": "How much is a latte?",
+    "expected_chunk_paths": ["pricing.md"],
+    "ground_truth_answer": "A latte is about $4.75 to $5.75 depending on size; the menu at the counter is authoritative.",
+    "criteria": ["price range for latte", "pricing.md"]
+  },
+  {
+    "id": "catering-notice",
+    "query": "Can I place a large catering order for tomorrow morning?",
+    "expected_chunk_paths": ["faq.md", "services.md"],
+    "ground_truth_answer": "Catering needs 24 hours notice; contact orders@easycoffee.example with date, headcount, and items.",
+    "criteria": ["24 hour notice", "email or catering process"]
+  },
+  {
+    "id": "holiday-closure",
+    "query": "Are you open on Christmas Day?",
+    "expected_chunk_paths": ["hours.md"],
+    "ground_truth_answer": "Easy Coffee is closed on December 25 (Christmas Day).",
+    "criteria": ["closed Dec 25"]
+  }
+]

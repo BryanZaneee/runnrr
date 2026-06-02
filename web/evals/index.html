@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EasyAgent — Eval Dashboard</title>
+  <meta name="description" content="RAG eval run trends and per-case metrics for EasyAgent profiles." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="evals.css?v=1" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark" id="brand-mark">EV</span>
+        <div>
+          <h1>EasyAgent Evals</h1>
+          <p class="brand-sub">RAG retrieval metrics</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <label class="api-field">
+          <span>API</span>
+          <input id="api-base" type="url" spellcheck="false" />
+        </label>
+        <label class="profile-picker">
+          <span>Profile</span>
+          <select id="profile-select" aria-label="Eval profile"></select>
+        </label>
+        <span id="index-badge" class="index-badge" aria-live="polite">—</span>
+        <button type="button" id="refresh-btn" class="btn">Refresh</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <p id="load-error" class="banner banner-error hidden" role="alert"></p>
+    <p id="load-meta" class="load-meta"></p>
+
+    <section class="panel" aria-labelledby="trend-heading">
+      <div class="panel-head">
+        <h2 id="trend-heading">Metric trend</h2>
+        <div class="variant-toggles" id="variant-toggles" aria-label="A/B variants">
+          <label><input type="checkbox" name="variant" value="keyword" checked /> keyword</label>
+          <label><input type="checkbox" name="variant" value="hybrid" checked /> hybrid</label>
+          <label><input type="checkbox" name="variant" value="hybrid_rerank" checked /> hybrid_rerank</label>
+        </div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="trend" width="960" height="280" role="img" aria-label="Eval metric trend chart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel panel-wide" aria-labelledby="cases-heading">
+      <div class="panel-head">
+        <h2 id="cases-heading">Latest run — per case</h2>
+        <span id="run-label" class="run-label"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="cases-table">
+          <thead>
+            <tr>
+              <th>Case</th>
+              <th>Recall@5</th>
+              <th>Ctx prec</th>
+              <th>Faith</th>
+              <th>Ans rel</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="case-detail" class="case-detail hidden" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script src="evals.js?v=1" defer></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+[
+  {
+    "_comment": "Placeholder — sales-concierge has no semantic KB index; recall metrics are N/A.",
+    "id": "package-fit",
+    "query": "Which EasyAgent package fits a small coffee shop that only needs website chat?",
+    "expected_chunk_paths": [],
+    "ground_truth_answer": "",
+    "criteria": ["catalog_lookup or qualify_lead", "preview-only disclaimer"]
+  },
+  {
+    "id": "pilot-checkout-preview",
+    "query": "Show me a checkout preview for a pilot package.",
+    "expected_chunk_paths": [],
+    "ground_truth_answer": "",
+    "criteria": ["checkout_link_preview", "demo not live billing"]
+  }
+]

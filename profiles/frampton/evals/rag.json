@@ -1,0 +1,37 @@
+[
+  {
+    "id": "after-bells-frampt",
+    "query": "What happens after I ring both bells of awakening?",
+    "expected_chunk_paths": ["Walkthroughs/FAQ.md"],
+    "ground_truth_answer": "Kingseeker Frampt appears at Firelink Shrine; you can feed him items for souls and sell items to him.",
+    "criteria": ["Frampt at Firelink", "both bells"]
+  },
+  {
+    "id": "sell-items",
+    "query": "How do I sell items for souls in Dark Souls 1?",
+    "expected_chunk_paths": ["Walkthroughs/FAQ.md"],
+    "ground_truth_answer": "After ringing both bells, Frampt at Firelink Shrine lets you discard items for souls; Snuggly offers simple trades.",
+    "criteria": ["Frampt selling", "bells requirement"]
+  },
+  {
+    "id": "artorias-build",
+    "query": "Is there an Artorias themed PvE build in the wiki?",
+    "expected_chunk_paths": ["PvE Builds/Artorias the Abysswalker Build.md"],
+    "ground_truth_answer": "Yes — the Artorias the Abysswalker Build page documents a themed PvE build.",
+    "criteria": ["names Artorias build page"]
+  },
+  {
+    "id": "soul-farming",
+    "query": "Where can I read about farming souls efficiently?",
+    "expected_chunk_paths": ["Walkthroughs/Soul Farming.md"],
+    "ground_truth_answer": "The Soul Farming walkthrough page covers efficient soul farming routes and tips.",
+    "criteria": ["Soul Farming page"]
+  },
+  {
+    "id": "estus-flask",
+    "query": "What is the Estus Flask?",
+    "expected_chunk_paths": ["Enemies/Estus Flask.md"],
+    "ground_truth_answer": "The Estus Flask is the primary healing item; details are on the Estus Flask wiki page.",
+    "criteria": ["Estus Flask topic"]
+  }
+]

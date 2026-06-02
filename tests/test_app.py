@@ -89,6 +89,21 @@ class TestProfiles:
         assert r.status_code == 200
         assert "rag_index" not in r.json()
 
+    def test_profile_with_unknown_tool_returns_400(self, client, monkeypatch):
+        from backend import app as app_module
+        from backend.profiles import ProfileConfigError
+
+        def boom(profile_id):
+            raise ProfileConfigError(
+                f"profile '{profile_id}' lists unknown tool(s): serch_kb."
+            )
+
+        c, _ = client
+        monkeypatch.setattr(app_module, "load_profile", boom)
+        r = c.get("/api/profile", params={"profile_id": "typoprof"})
+        assert r.status_code == 400
+        assert "serch_kb" in r.json()["detail"]
+
     def test_personal_agent_profile_loads_aliases_and_labels(self):
         from backend.profiles import load_profile
 

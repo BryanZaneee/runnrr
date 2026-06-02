@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.profiles import build_kb_manifest, load_profile
+from backend.profiles import ProfileConfigError, build_kb_manifest, load_profile
 from backend.providers.gemini_provider import GeminiProvider
 from backend.providers.openai_compat_provider import OpenAICompatProvider
 from backend.tools import SCHEMAS, run_tool
@@ -133,6 +133,47 @@ def test_inject_kb_manifest_opt_in(tmp_path):
 def test_unknown_explicit_profile_raises():
     with pytest.raises(FileNotFoundError):
         load_profile("definitely-not-a-profile")
+
+
+def test_unknown_tool_name_raises_profile_config_error(tmp_path):
+    """A typo in a profile's tools list fails loudly instead of being silently dropped."""
+    profile_dir = tmp_path / "typoprof"
+    profile_dir.mkdir()
+    (profile_dir / "system.md").write_text("you are a typo agent")
+    (profile_dir / "profile.json").write_text(
+        json.dumps(
+            {
+                "id": "typoprof",
+                "label": "Typo",
+                "description": "test",
+                "system_prompt_path": str(profile_dir / "system.md"),
+                "tools": ["list_kb", "serch_kb"],  # typo: serch_kb
+            }
+        )
+    )
+    with pytest.raises(ProfileConfigError) as excinfo:
+        load_profile("typoprof", profile_root=tmp_path)
+    assert "serch_kb" in str(excinfo.value)
+
+
+def test_empty_tools_list_is_valid(tmp_path):
+    """A profile with no tools is valid (closed-book / non-KB profiles)."""
+    profile_dir = tmp_path / "noprof"
+    profile_dir.mkdir()
+    (profile_dir / "system.md").write_text("you have no tools")
+    (profile_dir / "profile.json").write_text(
+        json.dumps(
+            {
+                "id": "noprof",
+                "label": "No Tools",
+                "description": "test",
+                "system_prompt_path": str(profile_dir / "system.md"),
+                "tools": [],
+            }
+        )
+    )
+    profile = load_profile("noprof", profile_root=tmp_path)
+    assert profile.tools == ()
 
 
 def test_missing_default_profile_raises(tmp_path):

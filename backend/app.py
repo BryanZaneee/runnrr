@@ -45,7 +45,7 @@ from backend.logging_config import configure_logging
 from backend.providers.base import LLMProvider
 from backend.providers.registry import ProviderSetupError, build_provider
 from backend.evals import store
-from backend.profiles import AgentProfile, load_profile
+from backend.profiles import AgentProfile, ProfileConfigError, load_profile
 from backend.rag.status import rag_index_payload
 from backend.status import runtime_status_payload
 from backend.tools import schemas_for_tools
@@ -83,6 +83,8 @@ def get_profile(profile_id: str = DEFAULT_PROFILE) -> AgentProfile:
         return load_profile(profile_id)
     except FileNotFoundError as e:
         raise HTTPException(status_code=400, detail=f"profile not found: {profile_id}") from e
+    except ProfileConfigError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 def warn_stale_indexes() -> None:

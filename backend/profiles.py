@@ -37,6 +37,10 @@ MANIFEST_MAX_FILES_PER_CATEGORY = 30
 MANIFEST_MAX_TOP_LEVEL_FILES = 40
 
 
+class ProfileConfigError(ValueError):
+    """Raised when a profile's configuration is invalid (e.g. unknown tool names)."""
+
+
 def _category_filenames(kb_root: Path, category: str) -> list[str]:
     """Return deduped, sorted basenames (no extension) of markdown files under a category."""
     seen: set[str] = set()
@@ -135,6 +139,25 @@ def _brand_metadata(value: Any) -> BrandMetadata:
     return cast(BrandMetadata, dict(value or {}))
 
 
+def _validate_tool_names(tools: tuple[str, ...], *, profile_id: str) -> None:
+    """Reject unknown tool names so a typo in profile.json fails loudly, not silently.
+
+    The import is deferred because backend.tools -> ... -> backend.rag.tools imports
+    this module, so importing it at module scope would close an import cycle. An empty
+    tools tuple is valid (e.g. closed-book / non-KB profiles).
+    """
+    from backend.tools.schemas import DEFAULT_TOOL_NAMES
+
+    known = set(DEFAULT_TOOL_NAMES)
+    unknown = [name for name in tools if name not in known]
+    if unknown:
+        raise ProfileConfigError(
+            f"profile '{profile_id}' lists unknown tool(s): "
+            f"{', '.join(sorted(unknown))}. "
+            f"Valid tools: {', '.join(sorted(known))}."
+        )
+
+
 def load_profile(
     profile_id: str | None = None,
     *,
@@ -163,6 +186,9 @@ def load_profile(
         else None
     )
 
+    tools = tuple(cfg.get("tools", DEFAULT_PROFILE_TOOLS))
+    _validate_tool_names(tools, profile_id=pid)
+
     return AgentProfile(
         id=cfg.get("id", pid),
         label=cfg.get("label", pid.title()),
@@ -171,7 +197,7 @@ def load_profile(
         system_prompt=system_prompt,
         welcome=cfg.get("welcome", ""),
         suggestions=tuple(cfg.get("suggestions", ())),
-        tools=tuple(cfg.get("tools", DEFAULT_PROFILE_TOOLS)),
+        tools=tools,
         tool_descriptions=dict(cfg.get("tool_descriptions", {})),
         brand=_brand_metadata(cfg.get("brand", {})),
         data_root=data_root,

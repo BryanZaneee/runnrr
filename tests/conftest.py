@@ -34,6 +34,16 @@ def reset_budget():
     TOKEN_BUDGET.reset()
 
 
+@pytest.fixture(autouse=True)
+def reset_manifest_cache():
+    """Clear the KB-manifest cache between tests (it is process-lifetime in prod)."""
+    from backend.profiles import clear_manifest_cache
+
+    clear_manifest_cache()
+    yield
+    clear_manifest_cache()
+
+
 @pytest.fixture
 def kb_root(use_mini_kb):
     """Convenience alias when a test wants to reference the path explicitly."""

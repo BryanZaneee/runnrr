@@ -56,6 +56,19 @@ def _format_filenames(names: list[str], cap: int) -> str:
     return ", ".join(names[:cap]) + f", +{extra} more"
 
 
+_MANIFEST_CACHE: dict[str, str] = {}
+
+
+def clear_manifest_cache() -> None:
+    """Reset the KB-manifest cache.
+
+    KB content is process-stable in prod (it changes only on deploy/rebuild,
+    which restarts the service); tests reset it between cases via an autouse
+    fixture.
+    """
+    _MANIFEST_CACHE.clear()
+
+
 def build_kb_manifest(kb_root: Path) -> str:
     """Build a compact text index of categories + page names under `kb_root`.
 
@@ -64,8 +77,21 @@ def build_kb_manifest(kb_root: Path) -> str:
     markdown files (recursively, deduped). Long categories are truncated with a
     "+N more" suffix so the manifest stays bounded.
 
-    Returns an empty string if the root has no readable content.
+    Returns an empty string if the root has no readable content. Memoized per
+    resolved kb_root for the process lifetime so large KBs (e.g. frampton, ~1.4k
+    files) are not re-walked on every profile load; dev edits to KB markdown need
+    a process restart to show up (uvicorn --reload restarts on .py changes only).
     """
+    key = str(kb_root.resolve())
+    cached = _MANIFEST_CACHE.get(key)
+    if cached is not None:
+        return cached
+    manifest = _compute_kb_manifest(kb_root)
+    _MANIFEST_CACHE[key] = manifest
+    return manifest
+
+
+def _compute_kb_manifest(kb_root: Path) -> str:
     kb_root = kb_root.resolve()
     if not kb_root.exists() or not kb_root.is_dir():
         return ""

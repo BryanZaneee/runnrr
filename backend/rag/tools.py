@@ -7,12 +7,10 @@ from typing import TYPE_CHECKING, Any
 
 from backend import config
 from backend.profiles import AgentProfile
-from backend.rag.embeddings import EmbeddingProvider
-from backend.rag.reranker import RERANK_CANDIDATES
-from backend.rag.retriever import run_hybrid_query
 from backend.tool_errors import ToolExecutionError
 
 if TYPE_CHECKING:
+    from backend.rag.embeddings import EmbeddingProvider
     from backend.tools.definitions import ToolContext, ToolDef
 
 SNIPPET_CHARS = 400
@@ -39,6 +37,12 @@ def semantic_search_kb(
         k = max(1, min(int(k), 20))
     except (TypeError, ValueError) as exc:
         raise SemanticSearchError("k must be an integer") from exc
+
+    # Imported lazily so backend.tools.registry can build this tool's schema
+    # without pulling the RAG retrieval graph (embeddings/reranker/retriever)
+    # at import time — only profiles that actually call the tool load it.
+    from backend.rag.reranker import RERANK_CANDIDATES
+    from backend.rag.retriever import run_hybrid_query
 
     q = query.strip()
     pool = max(k, RERANK_CANDIDATES) if config.RERANK_ENABLED else k

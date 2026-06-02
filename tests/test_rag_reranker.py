@@ -127,7 +127,9 @@ def test_semantic_search_honors_rerank_enabled(tmp_path, monkeypatch) -> None:
             return list(reversed(results[:top_k]))
 
     monkeypatch.setattr(config, "RERANK_ENABLED", True)
-    monkeypatch.setattr("backend.rag.tools.LLMReranker", StubReranker)
+    # The tool now reranks via run_hybrid_query, which lazily imports LLMReranker
+    # from its canonical module — patch there, not in backend.rag.tools.
+    monkeypatch.setattr("backend.rag.reranker.LLMReranker", StubReranker)
 
     reranked_paths = [
         row["path"]

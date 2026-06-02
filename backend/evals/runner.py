@@ -26,7 +26,7 @@ from backend.providers.registry import build_provider
 from backend.rag.embeddings import EmbeddingProvider, get_embedding_provider
 from backend.rag.indexer import Indexer
 from backend.rag.reranker import RERANK_CANDIDATES
-from backend.rag.retriever import get_retriever_for_profile
+from backend.rag.retriever import run_hybrid_query
 
 VARIANT_TOOLS: dict[str, tuple[str, ...]] = {
     "keyword": ("search_kb", "read_file"),
@@ -164,28 +164,28 @@ class RAGEvaluator:
             return paths, [], retrieved
 
         if variant in ("hybrid", "hybrid_rerank"):
+            do_rerank = variant == "hybrid_rerank"
+            pool = max(k, RERANK_CANDIDATES) if do_rerank else max(k, k * 3)
+            reranker = None
+            if do_rerank:
+                from backend.rag.reranker import LLMReranker
+
+                reranker = LLMReranker(
+                    model_id=self.grader_model_id,
+                    complete_fn=self._rerank_fn,
+                )
             try:
-                retr = get_retriever_for_profile(
+                results = run_hybrid_query(
                     self.profile,
+                    query,
+                    pool=pool,
+                    rerank=do_rerank,
                     embedding_provider=self.embedding,
                     index_dir=self.index_dir,
+                    reranker=reranker,
                 )
             except FileNotFoundError as exc:
                 raise EvalCaseSkipped(str(exc)) from exc
-
-            pool = (
-                max(k, RERANK_CANDIDATES)
-                if variant == "hybrid_rerank"
-                else max(k, k * 3)
-            )
-            results = retr.search(query, k=pool)
-            if variant == "hybrid_rerank":
-                from backend.rag.reranker import LLMReranker
-
-                results = LLMReranker(
-                    model_id=self.grader_model_id,
-                    complete_fn=self._rerank_fn,
-                ).rerank(query, results, top_k=pool)
 
             paths = _dedupe_paths([r.chunk.path for r in results])
             chunk_ids = [r.chunk.chunk_id for r in results][:k]

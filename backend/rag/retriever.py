@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from backend.profiles import AgentProfile
 from backend.rag.bm25_index import BM25Index
@@ -17,6 +17,9 @@ from backend.rag.indexer import (
     default_index_dir,
 )
 from backend.rag.vector_index import VectorIndex
+
+if TYPE_CHECKING:
+    from backend.rag.reranker import LLMReranker
 
 DEFAULT_RRF_K = 60
 _INDEX_FINGERPRINT_FILES = (MANIFEST_FILENAME, BM25_FILENAME, VECTOR_FILENAME)
@@ -193,6 +196,40 @@ def get_retriever_for_profile(
         )
         _RETRIEVER_CACHE[key] = retriever
     return retriever
+
+
+def run_hybrid_query(
+    profile: AgentProfile,
+    query: str,
+    *,
+    pool: int,
+    rerank: bool,
+    embedding_provider: EmbeddingProvider | None = None,
+    index_dir: Path | None = None,
+    reranker: "LLMReranker | None" = None,
+) -> list[RetrievalResult]:
+    """Canonical hybrid retrieval (+ optional rerank) shared by the tool and evals.
+
+    Returns the full candidate pool (length up to ``pool``); callers truncate to
+    their own ``k``. ``reranker`` is injectable so the eval runner can pass a
+    configured ``LLMReranker``; the tool uses the default. Each caller keeps its
+    own ``pool`` policy because they differ.
+
+    ``LLMReranker`` is imported lazily because backend.rag.reranker imports
+    RetrievalResult from this module — a module-level import would close a cycle.
+    """
+    retriever = get_retriever_for_profile(
+        profile,
+        embedding_provider=embedding_provider,
+        index_dir=index_dir,
+    )
+    results = retriever.search(query, k=pool)
+    if rerank:
+        from backend.rag.reranker import LLMReranker
+
+        rk = reranker or LLMReranker()
+        results = rk.rerank(query, results, top_k=pool)
+    return results
 
 
 def clear_retriever_cache(

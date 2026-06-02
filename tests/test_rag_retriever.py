@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import backend.rag.retriever as retriever_mod
 from backend.rag.chunker import Chunk
 from backend.rag.embeddings import FakeEmbeddingProvider
-from backend.rag.retriever import Retriever, reciprocal_rank_fusion
+from backend.rag.retriever import (
+    RetrievalResult,
+    Retriever,
+    reciprocal_rank_fusion,
+    run_hybrid_query,
+)
 
 
 class StubIndex:
@@ -58,3 +64,57 @@ def test_retriever_queries_both_indexes() -> None:
 
     assert {result.chunk.chunk_id for result in results} == {"a", "b"}
     assert results[0].score > 0
+
+
+class _RecordingRetriever:
+    """Stand-in for a built Retriever; records the pool size it was queried with."""
+
+    def __init__(self, results):
+        self.results = results
+        self.searched_k = None
+
+    def search(self, query, *, k):  # noqa: ANN001
+        self.searched_k = k
+        return self.results
+
+
+def test_run_hybrid_query_returns_full_pool_without_rerank(monkeypatch) -> None:
+    pool_results = [
+        RetrievalResult(chunk=_chunk("a", "a.md", "alpha"), score=0.9),
+        RetrievalResult(chunk=_chunk("b", "b.md", "beta"), score=0.5),
+    ]
+    rec = _RecordingRetriever(pool_results)
+    monkeypatch.setattr(retriever_mod, "get_retriever_for_profile", lambda profile, **kw: rec)
+
+    out = run_hybrid_query(object(), "alpha", pool=7, rerank=False)
+
+    # No truncation in the helper: the full pool comes back, queried at k=pool.
+    assert out == pool_results
+    assert rec.searched_k == 7
+
+
+def test_run_hybrid_query_applies_injected_reranker(monkeypatch) -> None:
+    pool_results = [
+        RetrievalResult(chunk=_chunk("a", "a.md", "alpha"), score=0.9),
+        RetrievalResult(chunk=_chunk("b", "b.md", "beta"), score=0.5),
+        RetrievalResult(chunk=_chunk("c", "c.md", "gamma"), score=0.1),
+    ]
+    monkeypatch.setattr(
+        retriever_mod,
+        "get_retriever_for_profile",
+        lambda profile, **kw: _RecordingRetriever(pool_results),
+    )
+
+    class FakeReranker:
+        def __init__(self):
+            self.top_k = None
+
+        def rerank(self, query, results, top_k):  # noqa: ANN001
+            self.top_k = top_k
+            return list(reversed(results))[:top_k]
+
+    fake = FakeReranker()
+    out = run_hybrid_query(object(), "alpha", pool=3, rerank=True, reranker=fake)
+
+    assert fake.top_k == 3
+    assert [r.chunk.chunk_id for r in out] == ["c", "b", "a"]

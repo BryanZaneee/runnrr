@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any
 from backend import config
 from backend.profiles import AgentProfile
 from backend.rag.embeddings import EmbeddingProvider
-from backend.rag.reranker import RERANK_CANDIDATES, LLMReranker
-from backend.rag.retriever import get_retriever_for_profile
+from backend.rag.reranker import RERANK_CANDIDATES
+from backend.rag.retriever import run_hybrid_query
 from backend.tool_errors import ToolExecutionError
 
 if TYPE_CHECKING:
@@ -40,22 +40,19 @@ def semantic_search_kb(
     except (TypeError, ValueError) as exc:
         raise SemanticSearchError("k must be an integer") from exc
 
+    q = query.strip()
+    pool = max(k, RERANK_CANDIDATES) if config.RERANK_ENABLED else k
     try:
-        retriever = get_retriever_for_profile(
+        results = run_hybrid_query(
             profile,
+            q,
+            pool=pool,
+            rerank=config.RERANK_ENABLED,
             embedding_provider=embedding_provider,
             index_dir=index_dir,
-        )
+        )[:k]
     except FileNotFoundError as exc:
         raise SemanticSearchError(str(exc)) from exc
-
-    q = query.strip()
-    if config.RERANK_ENABLED:
-        pool = max(k, RERANK_CANDIDATES)
-        candidates = retriever.search(q, k=pool)
-        results = LLMReranker().rerank(q, candidates, top_k=pool)[:k]
-    else:
-        results = retriever.search(q, k=k)
     return [
         {
             "path": result.chunk.path,

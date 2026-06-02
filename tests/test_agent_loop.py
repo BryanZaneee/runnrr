@@ -9,6 +9,8 @@ KB_ROOT at tests/fixtures/mini_kb), so tool dispatch in the loop produces real r
 from __future__ import annotations
 
 import json
+import shutil
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 import pytest
@@ -16,7 +18,11 @@ import pytest
 from backend.agent import run_conversation_stream
 from backend.profiles import AgentProfile
 from backend.providers.base import Event
+from backend.rag.embeddings import FakeEmbeddingProvider
+from backend.rag.indexer import Indexer
 from backend.tools import SCHEMAS, ToolResult
+
+MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
 
 
 class FakeProvider:
@@ -72,12 +78,29 @@ async def collect(gen: AsyncIterator[dict]) -> list[dict]:
 
 
 def make_test_profile(kb_root) -> AgentProfile:
+    # Opts into the personal-site tools and declares the path labels they rely
+    # on, mirroring profiles/personal-agent/profile.json — these are no longer
+    # engine defaults, so a profile must declare them to get the rich labels.
     return AgentProfile(
         id="test",
         label="Test",
         description="Test profile",
         kb_root=kb_root,
         system_prompt="test-system",
+        tools=(
+            "list_kb",
+            "read_file",
+            "search_kb",
+            "get_resume_summary",
+            "get_project_context",
+            "web_search",
+        ),
+        source_labels={"widget": "Widget"},
+        source_path_labels=(
+            ("resume/resume.md", "Resume"),
+            ("codebases/", "Codebase reference"),
+            ("meta/", "Portfolio knowledge base"),
+        ),
     )
 
 
@@ -339,6 +362,75 @@ class TestOneToolHop:
         assert result["hidden_count"] >= 0
         assert {"label": expected_label, "kind": expected_kind} in result["source_items"]
         assert_public_source_metadata_is_safe(result, kb_root)
+
+    @pytest.mark.asyncio
+    async def test_semantic_search_tool_flows_through_agent_loop(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        pytest.importorskip("sqlite_vec")
+        from backend import config
+
+        kb = tmp_path / "mini_rag_kb"
+        shutil.copytree(MINI_RAG_FIXTURE, kb)
+        index_root = tmp_path / "indexes"
+        monkeypatch.setattr(config, "RAG_INDEX_ROOT", index_root)
+        monkeypatch.setattr(config, "EMBEDDING_BACKEND", "fake")
+        monkeypatch.setattr(config, "EMBEDDING_MODEL", "")
+        profile = AgentProfile(
+            id="mini",
+            label="Mini",
+            description="Mini RAG profile",
+            kb_root=kb,
+            system_prompt="test-system",
+            tools=("list_kb", "read_file", "search_kb", "semantic_search_kb"),
+        )
+        Indexer(
+            profile,
+            FakeEmbeddingProvider(),
+            index_dir=index_root / profile.id,
+        ).build()
+
+        provider = FakeProvider(
+            [
+                [
+                    {"type": "tool_use_start", "name": "semantic_search_kb"},
+                    {
+                        "type": "tool_use_complete",
+                        "tool_use_id": "tu_semantic",
+                        "name": "semantic_search_kb",
+                        "arguments": {"query": "portable profile retrieval", "k": 2},
+                    },
+                    {"type": "message_done", "stop_reason": "tool_use"},
+                ],
+                [
+                    {"type": "text_delta", "text": "Done."},
+                    {"type": "message_done", "stop_reason": "end_turn"},
+                ],
+            ]
+        )
+
+        events = await collect(
+            run_conversation_stream(
+                "find conceptual retrieval context",
+                {"messages": []},
+                provider,
+                model="claude-sonnet-4-5",
+                profile=profile,
+            )
+        )
+
+        tool_results = [event for event in events if event["event"] == "tool_result"]
+        assert len(tool_results) == 1
+        assert tool_results[0]["name"] == "semantic_search_kb"
+        assert tool_results[0]["is_error"] is False
+        assert tool_results[0]["source_summary"].startswith("semantic searched")
+        assert tool_results[0]["source_items"]
+        assert_public_source_metadata_is_safe(tool_results[0], kb)
+        raw_result = provider.tool_results_received[0]
+        payload = json.loads(raw_result.content)
+        assert payload[0]["path"] == "projects/alpha.md"
 
 
 class TestUsageCategorization:

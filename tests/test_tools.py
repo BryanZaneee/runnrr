@@ -10,14 +10,15 @@ import pytest
 
 from backend.kb_loader import (
     KBError,
-    get_project_context,
-    get_resume_summary,
     list_kb,
     read_file,
     search_kb,
 )
-from backend.profiles import load_profile
+from backend.profiles import DEFAULT_PROFILE_TOOLS, AgentProfile, load_profile
 from backend.tools import SCHEMAS, run_tool
+from backend.tools.definitions import ToolContext
+from backend.tools.personal_kb import get_project_context, get_resume_summary
+from backend.tools.registry import TOOL_DEFS, TOOL_DEFS_BY_NAME, TOOL_HANDLERS
 
 
 # --------------------------------------------------------------------------- #
@@ -44,6 +45,19 @@ class TestPathSafety:
     def test_traversal_via_subdir_in_search_blocked(self):
         with pytest.raises(KBError):
             search_kb("anything", subdir="..")
+
+    def test_search_skips_symlink_escape(self, tmp_path):
+        kb = tmp_path / "kb"
+        kb.mkdir()
+        outside = tmp_path / "outside.md"
+        outside.write_text("outside-secret", encoding="utf-8")
+        link = kb / "leak.md"
+        try:
+            link.symlink_to(outside)
+        except OSError as exc:
+            pytest.skip(f"symlinks unavailable: {exc}")
+
+        assert search_kb("outside-secret", root=kb) == []
 
 
 # --------------------------------------------------------------------------- #
@@ -164,6 +178,13 @@ class TestSpecialized:
         assert result["project"] == "widget"
         assert "test widget" in result["summary"].lower()
 
+    def test_get_project_context_resolves_aliases(self):
+        result = get_project_context(
+            "bryanzane.com",
+            aliases={"bryanzane.com": "widget"},
+        )
+        assert result["project"] == "widget"
+
     def test_get_project_context_unknown_raises(self):
         with pytest.raises(KBError, match="no project file"):
             get_project_context("nonexistent")
@@ -213,6 +234,34 @@ class TestRunTool:
             "get_project_context", {"project_name": "nope"}, tool_use_id="t7"
         )
         assert result.is_error is True
+
+    def test_unexpected_tool_error_is_masked_by_default(self, monkeypatch):
+        from backend import config
+
+        def explode(arguments, context):
+            raise RuntimeError("secret internal failure")
+
+        monkeypatch.setattr(config, "TOOL_DEBUG_ERRORS", False)
+        monkeypatch.setitem(TOOL_HANDLERS, "explode", explode)
+
+        result = run_tool("explode", {}, tool_use_id="t8")
+
+        assert result.is_error is True
+        payload = json.loads(result.content)
+        assert payload == {"error": "tool failed unexpectedly"}
+        assert "secret internal failure" not in result.content
+
+    def test_unexpected_tool_error_reraises_in_debug_mode(self, monkeypatch):
+        from backend import config
+
+        def explode(arguments, context):
+            raise RuntimeError("secret internal failure")
+
+        monkeypatch.setattr(config, "TOOL_DEBUG_ERRORS", True)
+        monkeypatch.setitem(TOOL_HANDLERS, "explode", explode)
+
+        with pytest.raises(RuntimeError, match="secret internal failure"):
+            run_tool("explode", {}, tool_use_id="t9")
 
     def test_tool_use_id_round_trips(self):
         result = run_tool("list_kb", {"subdir": ""}, tool_use_id="my-unique-id")
@@ -561,3 +610,68 @@ class TestSalesPreviewTools:
         )
         assert result.is_error is True
         assert "data_root" in json.loads(result.content)["error"]
+
+
+# --------------------------------------------------------------------------- #
+# Engine vs. personal-site decoupling
+# --------------------------------------------------------------------------- #
+
+def _profile(kb_root, *, source_path_labels=(), source_labels=None):
+    return AgentProfile(
+        id="p",
+        label="P",
+        description="",
+        kb_root=kb_root,
+        system_prompt="s",
+        source_labels=source_labels or {},
+        source_path_labels=tuple(source_path_labels),
+    )
+
+
+class TestEngineDecoupling:
+    def test_personal_tools_not_in_defaults(self):
+        assert DEFAULT_PROFILE_TOOLS == ("list_kb", "read_file", "search_kb", "web_search")
+        assert "get_resume_summary" not in DEFAULT_PROFILE_TOOLS
+        assert "get_project_context" not in DEFAULT_PROFILE_TOOLS
+
+    def test_personal_tools_still_globally_registered(self):
+        # Moved to personal_kb.py, but a profile can still opt in by listing them.
+        assert "get_resume_summary" in TOOL_DEFS_BY_NAME
+        assert "get_project_context" in TOOL_DEFS_BY_NAME
+
+
+class TestProfileScopedSourceLabels:
+    def test_profile_path_labels_apply(self, kb_root):
+        profile = _profile(
+            kb_root,
+            source_path_labels=[
+                ("resume/resume.md", "Resume"),
+                ("meta/", "Portfolio knowledge base"),
+            ],
+        )
+        r = run_tool("read_file", {"path": "meta/faq.md"}, "t1", root=kb_root, profile=profile)
+        assert r.source_items == [{"label": "Portfolio knowledge base", "kind": "kb_read"}]
+        r2 = run_tool("read_file", {"path": "resume/resume.md"}, "t2", root=kb_root, profile=profile)
+        assert r2.source_items == [{"label": "Resume", "kind": "kb_read"}]
+
+    def test_generic_profile_gets_generic_label(self, kb_root):
+        # No source_path_labels: the engine carries no personal taxonomy.
+        profile = _profile(kb_root)
+        r = run_tool("read_file", {"path": "meta/faq.md"}, "t", root=kb_root, profile=profile)
+        assert r.source_items == [{"label": "Knowledge base document", "kind": "kb_read"}]
+
+    def test_projects_slug_is_generic_engine_rule(self, kb_root):
+        # projects/<slug> -> "Project: <Title>" stays a data-derived engine rule.
+        profile = _profile(kb_root)
+        r = run_tool("read_file", {"path": "projects/widget.md"}, "t", root=kb_root, profile=profile)
+        assert r.source_items == [{"label": "Project: Widget", "kind": "kb_read"}]
+
+
+class TestMetadataBuilderArity:
+    def test_every_builder_accepts_tool_context(self):
+        # Guards the (args, out, ToolContext) signature: a builder left at arity
+        # 2 would TypeError here. None output exercises the empty-result path.
+        ctx = ToolContext()
+        for tool in TOOL_DEFS:
+            meta = tool.source_metadata({}, None, ctx)
+            assert {"source_summary", "source_items", "source_count", "hidden_count"} <= set(meta)

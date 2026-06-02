@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
+from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Request
@@ -23,6 +23,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from backend import config
 from backend.agent import run_conversation_stream
 from backend.budget import TOKEN_BUDGET
 from backend.config import (
@@ -31,6 +32,7 @@ from backend.config import (
     DEFAULT_PROFILE,
     LOG_LEVEL,
     MAX_ACTIVE_SESSIONS,
+    MAX_TOKENS,
     MAX_TURNS_PER_SESSION,
     MODEL_REGISTRY,
     PROFILE_ROOT,
@@ -40,10 +42,15 @@ from backend.config import (
     available_models,
 )
 from backend.logging_config import configure_logging
-from backend.providers.anthropic_provider import AnthropicProvider
 from backend.providers.base import LLMProvider
+from backend.providers.registry import ProviderSetupError, build_provider
+from backend.evals import store
 from backend.profiles import AgentProfile, load_profile
+from backend.rag.status import rag_index_payload
+from backend.status import runtime_status_payload
 from backend.tools import schemas_for_tools
+from backend.tools.registry import TOOL_DEFS
+from backend.types import SessionDict
 
 configure_logging(level=getattr(logging, LOG_LEVEL.upper(), logging.INFO))
 log = logging.getLogger("easyagent")
@@ -52,7 +59,7 @@ log = logging.getLogger("easyagent")
 REGISTERED_PROVIDERS: set[str] = {"anthropic", "openai_compat", "gemini"}
 
 
-SESSIONS: dict[str, dict] = {}
+SESSIONS: dict[str, SessionDict] = {}
 
 
 def _cleanup_stale_sessions() -> None:
@@ -64,37 +71,10 @@ def _cleanup_stale_sessions() -> None:
 
 def get_provider(model_id: str) -> LLMProvider:
     """Resolve model_id → provider instance. Tests monkeypatch this."""
-    cfg = MODEL_REGISTRY[model_id]
-    if cfg["provider"] == "anthropic":
-        if not os.environ.get("ANTHROPIC_API_KEY"):
-            raise HTTPException(status_code=400, detail="missing ANTHROPIC_API_KEY")
-        return AnthropicProvider(thinking_budget=cfg.get("thinking_budget"))
-    if cfg["provider"] == "openai_compat":
-        api_key_env = cfg["api_key_env"]
-        if not os.environ.get(api_key_env):
-            raise HTTPException(status_code=400, detail=f"missing {api_key_env}")
-        from backend.providers.openai_compat_provider import OpenAICompatProvider
-
-        return OpenAICompatProvider(
-            api_key_env=api_key_env,
-            base_url=cfg.get("base_url"),
-            token_param=cfg.get("token_param", "max_completion_tokens"),
-            stream_options=cfg.get("stream_options", True),
-            include_tool_result_name=bool(cfg.get("base_url")),
-            extra_body=cfg.get("extra_body"),
-            reasoning_effort=cfg.get("reasoning_effort"),
-            preserve_reasoning_content=bool(cfg.get("preserve_reasoning_content")),
-        )
-    if cfg["provider"] == "gemini":
-        api_key_env = cfg["api_key_env"]
-        if not os.environ.get(api_key_env):
-            raise HTTPException(status_code=400, detail=f"missing {api_key_env}")
-        from backend.providers.gemini_provider import GeminiProvider
-
-        return GeminiProvider(api_key_env=api_key_env)
-    raise HTTPException(
-        status_code=400, detail=f"provider not implemented yet: {cfg['provider']}"
-    )
+    try:
+        return build_provider(model_id, MODEL_REGISTRY[model_id])
+    except ProviderSetupError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def get_profile(profile_id: str = DEFAULT_PROFILE) -> AgentProfile:
@@ -105,7 +85,40 @@ def get_profile(profile_id: str = DEFAULT_PROFILE) -> AgentProfile:
         raise HTTPException(status_code=400, detail=f"profile not found: {profile_id}") from e
 
 
-app = FastAPI(title="EasyAgent", version="0.1.0")
+def warn_stale_indexes() -> None:
+    """Log warnings for RAG-enabled profiles with stale/missing indexes. Never raises."""
+    if not PROFILE_ROOT.is_dir():
+        return
+    for entry in sorted(PROFILE_ROOT.iterdir()):
+        if not entry.is_dir() or not (entry / "profile.json").exists():
+            continue
+        try:
+            p = load_profile(entry.name)
+        except Exception as exc:
+            log.warning("skipping unloadable profile %s: %s", entry.name, exc)
+            continue
+        payload = rag_index_payload(p)
+        if not payload.get("rag_enabled"):
+            continue
+        if payload.get("status") in {"stale", "missing", "error"}:
+            log.warning(
+                "rag_index_stale",
+                extra={
+                    "profile": p.id,
+                    "rag_status": payload.get("status"),
+                    "rag_message": payload.get("message", ""),
+                    "hint": f"run: python -m backend.rag.cli build {p.id}",
+                },
+            )
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    warn_stale_indexes()
+    yield
+
+
+app = FastAPI(title="EasyAgent", version="0.1.0", lifespan=lifespan)
 
 limiter = Limiter(key_func=get_remote_address, enabled=RATE_LIMIT_ENABLED)
 app.state.limiter = limiter
@@ -146,6 +159,54 @@ async def budget() -> dict:
     return TOKEN_BUDGET.stats()
 
 
+@app.get("/api/status")
+async def status() -> dict:
+    """Dev-dashboard aggregate; external clients should prefer the focused endpoints."""
+    _cleanup_stale_sessions()
+    return runtime_status_payload(
+        sessions=len(SESSIONS),
+        budget=TOKEN_BUDGET.stats(),
+        registered_providers=REGISTERED_PROVIDERS,
+        native_tool_count=len(TOOL_DEFS),
+    )
+
+
+@app.get("/api/rag/index")
+async def rag_index(profile_id: str = DEFAULT_PROFILE) -> dict:
+    """RAG index health for one profile. Used by the local technical dashboard."""
+    return rag_index_payload(get_profile(profile_id))
+
+
+def _require_evals_api() -> None:
+    if not config.ENABLE_EVALS_API:
+        raise HTTPException(status_code=404, detail="not found")
+
+
+@app.get("/api/evals/runs/{profile_id}")
+async def evals_list_runs(profile_id: str) -> dict:
+    _require_evals_api()
+    get_profile(profile_id)
+    return {"profile_id": profile_id, "runs": store.list_runs(profile_id)}
+
+
+@app.get("/api/evals/run/{profile_id}/{run_id}")
+async def evals_read_run(profile_id: str, run_id: str) -> dict:
+    _require_evals_api()
+    get_profile(profile_id)
+    try:
+        return store.read_run(profile_id, run_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="not found") from None
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="run not found") from None
+
+
+@app.get("/api/evals/index-status/{profile_id}")
+async def evals_index_status(profile_id: str) -> dict:
+    _require_evals_api()
+    return rag_index_payload(get_profile(profile_id))
+
+
 @app.get("/api/models")
 async def list_models() -> dict:
     models = [m for m in available_models() if m["provider"] in REGISTERED_PROVIDERS]
@@ -157,6 +218,9 @@ async def list_models() -> dict:
 
 @app.get("/api/profile")
 async def profile(profile_id: str = DEFAULT_PROFILE) -> dict:
+    # Intentionally cheap: no RAG-index inspection here (that scans/hashes the KB
+    # filesystem). Production chat clients hit this on every agent switch. RAG
+    # health lives at the dedicated GET /api/rag/index endpoint.
     p = get_profile(profile_id)
     return {
         "id": p.id,
@@ -165,7 +229,10 @@ async def profile(profile_id: str = DEFAULT_PROFILE) -> dict:
         "welcome": p.welcome,
         "suggestions": list(p.suggestions),
         "tools": list(p.tools),
-        "tool_schemas": schemas_for_tools(p.tools),
+        "tool_schemas": schemas_for_tools(
+            p.tools,
+            description_overrides=p.tool_descriptions,
+        ),
         "brand": p.brand,
         "mcp_servers": [s["name"] for s in p.mcp_servers],
     }
@@ -181,7 +248,8 @@ async def list_profiles() -> dict:
                 continue
             try:
                 p = load_profile(entry.name)
-            except Exception:
+            except Exception as exc:
+                log.warning("skipping unloadable profile %s: %s", entry.name, exc)
                 continue
             out.append({
                 "id": p.id,

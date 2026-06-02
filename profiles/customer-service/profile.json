@@ -4,7 +4,7 @@
   "description": "Tier-1 customer-service agent for a small business website chat widget. Bundled example: Easy Coffee.",
   "kb_root": "profiles/customer-service/kb",
   "system_prompt_path": "profiles/customer-service/system.md",
-  "tools": ["list_kb", "read_file", "search_kb"],
+  "tools": ["list_kb", "read_file", "search_kb", "semantic_search_kb"],
   "mcp_servers": [],
   "brand": {
     "accent": "#f0642f",

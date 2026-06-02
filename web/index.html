@@ -3,102 +3,130 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>EasyAgent / portable agent framework</title>
-  <meta name="description" content="A portable framework for reusable agentic AI." />
-
+  <title>EasyAgent — Dev Dashboard</title>
+  <meta name="description" content="Technical dashboard for the EasyAgent runtime: health, budget, profiles, tools, and RAG indexes." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-
-  <link rel="stylesheet" href="styles.css?v=8" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" />
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js" defer></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" defer></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/highlight.min.js" defer></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js" defer></script>
-  <script src="lib/markdown.js?v=1" defer></script>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=1" />
 </head>
-<body data-profile="strauss">
-  <header class="hdr">
-    <div class="hdr-inner">
-      <span class="hdr-mark">EASYAGENT</span>
-      <span class="hdr-slash">/</span>
-      <span class="hdr-role">portable agent framework</span>
-      <span class="hdr-spacer"></span>
-      <a class="hdr-link" href="https://bryanzane.com">bryanzane.com</a>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark">EA</span>
+        <div>
+          <h1>EasyAgent</h1>
+          <p class="brand-sub">Technical dashboard</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <label class="api-field">
+          <span>API</span>
+          <input id="api-base" type="url" spellcheck="false" />
+        </label>
+        <button type="button" id="refresh-btn" class="btn">Refresh</button>
+      </div>
     </div>
   </header>
 
-  <section class="lb-hero">
-    <div class="lb-hero-grid-bg" aria-hidden="true"></div>
-    <div class="lb-hero-inner">
-      <h1 class="lb-banner-h1">
-        <div class="lb-banner-row">
-          <pre class="lb-banner lb-banner-body" aria-label="EasyAgent">
-███████╗ █████╗ ███████╗██╗   ██╗     █████╗  ██████╗ ███████╗███╗   ██╗████████╗
-██╔════╝██╔══██╗██╔════╝╚██╗ ██╔╝    ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝
-█████╗  ███████║███████╗ ╚████╔╝     ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║
-██╔══╝  ██╔══██║╚════██║  ╚██╔╝      ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║
-███████╗██║  ██║███████║   ██║       ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║
-╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝       ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝
-          </pre>
-          <pre class="lb-banner lb-face" data-agent="strauss" aria-hidden="true">
- .---.
-( o o )
- \ ^ /
-  '-'
-          </pre>
-        </div>
-      </h1>
-      <p class="lb-tagline">Easy, portable agentic framework for all use cases.</p>
-    </div>
-  </section>
+  <main class="layout">
+    <p id="load-error" class="banner banner-error hidden" role="alert"></p>
+    <p id="load-meta" class="load-meta"></p>
 
-  <main class="chat" id="chat">
-    <div class="chat-feed" id="chat-feed">
-      <div class="msg msg-system">
-        <p>I run focused agent profiles across multiple model providers, grounded in the tools and knowledge base each profile is allowed to use.</p>
-        <p class="hint">Try: <em>Ask about the active profile</em> &middot; <em>Compare available models</em> &middot; <em>Show what tools are enabled</em></p>
+    <section class="panel" aria-labelledby="runtime-heading">
+      <div class="panel-head">
+        <h2 id="runtime-heading">Runtime</h2>
       </div>
-    </div>
+      <div id="runtime-grid" class="stat-grid"></div>
+      <dl id="limits-list" class="kv-list"></dl>
+    </section>
 
-    <form class="chat-form" id="chat-form" autocomplete="off">
-      <div class="chat-controls">
-        <span class="model-static">DeepSeek V4 Flash</span>
-        <label class="agent-select-wrap">
-          <span class="agent-select-label">agent</span>
-          <select id="agent-select" class="agent-select" aria-label="Choose an agent profile"></select>
+    <section class="panel" aria-labelledby="budget-heading">
+      <div class="panel-head">
+        <h2 id="budget-heading">Token budget</h2>
+      </div>
+      <div id="budget-panel" class="budget-panel"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="models-heading">
+      <div class="panel-head">
+        <h2 id="models-heading">Models</h2>
+      </div>
+      <div class="table-wrap">
+        <table id="models-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Label</th>
+              <th>Vendor</th>
+              <th>Provider</th>
+              <th>Default</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel panel-wide" aria-labelledby="profiles-heading">
+      <div class="panel-head">
+        <h2 id="profiles-heading">Profiles</h2>
+        <label class="profile-picker">
+          <span>Inspect</span>
+          <select id="profile-select" aria-label="Select profile to inspect"></select>
         </label>
-        <button type="button" id="new-chat" class="btn-ghost" title="Start a fresh conversation">new chat</button>
       </div>
-      <details class="agent-info" id="agent-info">
-        <summary>agent details</summary>
-        <div class="agent-info-body">
-          <div class="agent-info-row"><span class="agent-info-label">about</span><span id="agent-info-desc" class="agent-info-value">&mdash;</span></div>
-          <div class="agent-info-row"><span class="agent-info-label">tools</span><span id="agent-info-tools" class="agent-info-value">&mdash;</span></div>
-          <div class="agent-info-row"><span class="agent-info-label">mcp</span><span id="agent-info-mcp" class="agent-info-value">none configured</span></div>
-          <div class="agent-info-row"><span class="agent-info-label">last turn</span><span id="agent-info-last" class="agent-info-value">&mdash;</span></div>
-          <div class="agent-info-row"><span class="agent-info-label">speed</span><span id="agent-info-speed" class="agent-info-value">&mdash;</span></div>
-          <div class="agent-info-row"><span class="agent-info-label">session</span><span id="agent-info-session" class="agent-info-value">in 0 &middot; out 0 &middot; cache 0 &middot; 0 hops</span></div>
+      <div class="table-wrap">
+        <table id="profiles-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Label</th>
+              <th>Tools</th>
+              <th>MCP</th>
+              <th>Default</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="profile-detail" class="profile-detail hidden">
+        <h3 id="profile-detail-title">Profile detail</h3>
+        <p id="profile-description" class="profile-description"></p>
+        <div class="detail-columns">
+          <div>
+            <h4>Enabled tools</h4>
+            <ul id="profile-tools" class="chip-list"></ul>
+          </div>
+          <div>
+            <h4>MCP servers</h4>
+            <ul id="profile-mcp" class="chip-list"></ul>
+          </div>
         </div>
-      </details>
-      <div class="chat-input-row">
-        <span class="chat-prompt">&gt;</span>
-        <input
-          type="text"
-          id="message-input"
-          class="chat-input"
-          placeholder="ask the active agent&hellip;"
-          autocomplete="off"
-          maxlength="4000"
-          required
-        />
-        <button type="submit" id="send" class="btn-send">send</button>
+        <details class="json-block">
+          <summary>Tool schemas (JSON)</summary>
+          <pre id="profile-schemas" class="json-pre"></pre>
+        </details>
       </div>
-    </form>
+    </section>
+
+    <section class="panel" aria-labelledby="rag-heading">
+      <div class="panel-head">
+        <h2 id="rag-heading">RAG index</h2>
+        <span id="rag-profile-label" class="muted"></span>
+      </div>
+      <div id="rag-panel" class="rag-panel"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="endpoints-heading">
+      <div class="panel-head">
+        <h2 id="endpoints-heading">API endpoints</h2>
+      </div>
+      <ul id="endpoint-list" class="endpoint-list"></ul>
+    </section>
   </main>
 
-  <script src="app.js?v=8" defer></script>
+  <script src="app.js?v=1"></script>
 </body>
 </html>

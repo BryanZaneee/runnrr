@@ -9,12 +9,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from backend.types import AvailableModel, ModelConfig
+
 load_dotenv()
 
 KB_ROOT: Path = Path(os.environ.get("EASYAGENT_KB_ROOT", "./kb")).resolve()
 PROFILE_ROOT: Path = Path(os.environ.get("EASYAGENT_PROFILE_ROOT", "./profiles")).resolve()
 
-DEFAULT_PROFILE: str = os.environ.get("DEFAULT_PROFILE", "strauss")
+DEFAULT_PROFILE: str = os.environ.get("DEFAULT_PROFILE", "personal-agent")
 DEFAULT_MODEL: str = os.environ.get("DEFAULT_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS: int = int(os.environ.get("MAX_TOKENS", "4096"))
 MAX_TOOL_HOPS: int = int(os.environ.get("MAX_TOOL_HOPS", "8"))
@@ -29,6 +31,23 @@ RATE_LIMIT_CHAT: str = os.environ.get("RATE_LIMIT_CHAT", "10/minute;100/hour")
 RATE_LIMIT_ENABLED: bool = os.environ.get("RATE_LIMIT_ENABLED", "1") == "1"
 
 LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
+TOOL_DEBUG_ERRORS: bool = os.environ.get("EASYAGENT_TOOL_DEBUG_ERRORS", "0") == "1"
+
+EMBEDDING_BACKEND: str = os.environ.get(
+    "EASYAGENT_EMBEDDING_BACKEND", "voyage"
+).strip().lower()
+EMBEDDING_MODEL: str = os.environ.get("EASYAGENT_EMBEDDING_MODEL", "").strip()
+VOYAGE_API_KEY: str = os.environ.get("VOYAGE_API_KEY", "").strip()
+# Voyage free tier (no payment method) is ~3 req/min; use 8–16. Paid/default: 96.
+EMBED_BATCH_SIZE: int = max(1, int(os.environ.get("EASYAGENT_EMBED_BATCH_SIZE", "96")))
+_rag_index_root = os.environ.get("EASYAGENT_RAG_INDEX_ROOT", "").strip()
+RAG_INDEX_ROOT: Path | None = (
+    Path(_rag_index_root).expanduser().resolve() if _rag_index_root else None
+)
+
+GRADER_MODEL_ID: str = os.environ.get("EASYAGENT_GRADER_MODEL", "claude-haiku-4-5").strip()
+ENABLE_EVALS_API: bool = os.environ.get("ENABLE_EVALS_API", "0") == "1"
+RERANK_ENABLED: bool = os.environ.get("EASYAGENT_RERANK", "0") == "1"
 
 ALLOWED_ORIGINS: list[str] = [
     o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()
@@ -36,7 +55,7 @@ ALLOWED_ORIGINS: list[str] = [
 
 # model_id -> {provider, model, label, [base_url], [api_key_env]}
 # `model_id` is the public identifier sent by the frontend; `model` is what each provider's API expects.
-MODEL_REGISTRY: dict[str, dict] = {
+MODEL_REGISTRY: dict[str, ModelConfig] = {
     "claude-opus-4-7": {
         "provider": "anthropic",
         "model": "claude-opus-4-7",
@@ -64,6 +83,12 @@ MODEL_REGISTRY: dict[str, dict] = {
         "label": "Claude Opus 4.5",
         "vendor": "Anthropic",
         "thinking_budget": 2048,
+    },
+    "claude-haiku-4-5": {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5",
+        "label": "Claude Haiku 4.5",
+        "vendor": "Anthropic",
     },
     "kimi-k2.6": {
         "provider": "openai_compat",
@@ -145,9 +170,9 @@ MODEL_REGISTRY: dict[str, dict] = {
 }
 
 
-def available_models() -> list[dict]:
+def available_models() -> list[AvailableModel]:
     """Models whose required API key is present in env. Drives /api/models."""
-    out: list[dict] = []
+    out: list[AvailableModel] = []
     for mid, cfg in MODEL_REGISTRY.items():
         if cfg["provider"] == "anthropic":
             if not os.environ.get("ANTHROPIC_API_KEY"):

@@ -1,712 +1,312 @@
-// EasyAgent chat UI controller for the standalone demo. Vanilla, no build step.
-// Talks to the FastAPI backend at /api/chat (SSE), /api/models, and /api/profile.
+// EasyAgent technical dashboard — read-only view of runtime state via REST APIs.
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-const API_BASE = window.EASYAGENT_API_BASE
-  || (LOCAL_HOSTS.has(window.location.hostname) ? "http://127.0.0.1:8001" : "");
+const API_BASE_KEY = "easyagent-dashboard-api-base";
 
-const SESSION_KEY = "strauss-session";
-const FIXED_MODEL = "deepseek-v4-flash";
-
-const DEFAULT_AGENT_PRESENTATION = {
-  brand: {
-    accent: "#FF5500",
-    accentDark: "#5C1F00",
-    accentSoft: "#FFE7DA",
-    grid: "rgba(255, 85, 0, 0.13)",
-    mark: "#FF5500",
-  },
-  asciiName: "",
-  asciiAriaLabel: "",
-  introRest: "",
-  face: " [._.]",
-  placeholder: "ask the active agent…",
-};
-
-const AGENT_PRESENTATION = {
-  strauss: {
-    brand: {
-      accent: "#386F3D",
-      accentDark: "#1F4D28",
-      accentSoft: "#E8F3E6",
-      grid: "rgba(56, 111, 61, 0.15)",
-      mark: "#9BD400",
-    },
-    asciiAriaLabel: "Easy Agent - Strauss",
-    face: [
-      " .---.",
-      "( o o )",
-      " \\ ^ /",
-      "  '-'",
-    ].join("\n"),
-    placeholder: "ask Easy Agent - Strauss about Bryan…",
-  },
-  "customer-service": {
-    brand: {
-      accent: "#F0642F",
-      accentDark: "#7A2F17",
-      accentSoft: "#FFF0E7",
-      grid: "rgba(240, 100, 47, 0.13)",
-      mark: "#F0642F",
-    },
-    asciiAriaLabel: "Easy Coffee",
-    face: [
-      "  ( (",
-      " .____.",
-      " |    |]",
-      " '----'",
-    ].join("\n"),
-    placeholder: "ask Easy Coffee about hours, menu, ordering…",
-  },
-  "research-analyst": {
-    brand: {
-      accent: "#2F7DE1",
-      accentDark: "#164F93",
-      accentSoft: "#E6F2FF",
-      grid: "rgba(47, 125, 225, 0.14)",
-      mark: "#2F7DE1",
-    },
-    asciiAriaLabel: "Research Analyst",
-    face: [
-      " .-.",
-      "( o )",
-      " '-'",
-    ].join("\n"),
-    placeholder: "ask Research Analyst to investigate…",
-  },
-  "sales-concierge": {
-    brand: {
-      accent: "#0F7A4A",
-      accentDark: "#07502F",
-      accentSoft: "#E8F7EF",
-      grid: "rgba(15, 122, 74, 0.14)",
-      mark: "#C99A2E",
-    },
-    asciiAriaLabel: "Sales Concierge",
-    face: [
-      " ____",
-      "|$  |",
-      "|___|",
-    ].join("\n"),
-    placeholder: "ask Sales Concierge which EasyAgent package fits…",
-  },
-};
-
-function presentationFor(profileOrId) {
-  const id = String(profileOrId?.id || profileOrId || "").toLowerCase();
-  const label = String(profileOrId?.label || profileOrId?.name || "").toLowerCase();
-  const lookup = `${id} ${label}`;
-  const key = AGENT_PRESENTATION[id]
-    ? id
-    : lookup.includes("coffee") || lookup.includes("customer") ? "customer-service"
-    : lookup.includes("research") || lookup.includes("analyst") ? "research-analyst"
-    : lookup.includes("sales") || lookup.includes("concierge") ? "sales-concierge"
-    : lookup.includes("strauss") ? "strauss"
-    : id;
-  const profile = AGENT_PRESENTATION[key] || {};
-  return {
-    ...DEFAULT_AGENT_PRESENTATION,
-    ...profile,
-    brand: { ...DEFAULT_AGENT_PRESENTATION.brand, ...(profile.brand || {}) },
-  };
-}
-
-const state = {
-  profile: null,
-  profiles: [],
-  currentModel: FIXED_MODEL,
-  sessionId: null,
-  inflight: false,
-  // FIFO of unsettled tool indicators. The backend emits all tool_use_starts
-  // for a hop, then all tool_results in matching order.
-  pendingTools: [],
-  // Per-turn token classifier output, cleared on each user message.
-  lastTurnUsage: [],
-  // Cumulative across the active session.
-  sessionUsage: {input: 0, output: 0, reasoning: 0, cache_read: 0, tool_hops: 0},
-  // Per-turn timing for TTFT (first token latency) and TPS (output tok/s).
-  turnTiming: {startedAt: null, firstDeltaAt: null, doneAt: null},
-};
+const ENDPOINTS = [
+  { method: "GET", path: "/api/status", note: "Aggregated runtime, budget, limits, registry" },
+  { method: "GET", path: "/api/health", note: "Liveness and active session count" },
+  { method: "GET", path: "/api/budget", note: "Daily token budget usage" },
+  { method: "GET", path: "/api/models", note: "Models available for the configured API keys" },
+  { method: "GET", path: "/api/profiles", note: "Bundled agent profiles" },
+  { method: "GET", path: "/api/profile?profile_id=", note: "One profile with tool schemas" },
+  { method: "GET", path: "/api/rag/index?profile_id=", note: "RAG index health for a profile" },
+  { method: "POST", path: "/api/chat", note: "SSE chat stream (not used by this dashboard)" },
+];
 
 const els = {
-  feed: () => document.getElementById("chat-feed"),
-  form: () => document.getElementById("chat-form"),
-  input: () => document.getElementById("message-input"),
-  send: () => document.getElementById("send"),
-  newChat: () => document.getElementById("new-chat"),
-  agentSelect: () => document.getElementById("agent-select"),
-  agentDesc: () => document.getElementById("agent-info-desc"),
-  agentTools: () => document.getElementById("agent-info-tools"),
-  agentMcp: () => document.getElementById("agent-info-mcp"),
-  agentLast: () => document.getElementById("agent-info-last"),
-  agentSpeed: () => document.getElementById("agent-info-speed"),
-  agentSession: () => document.getElementById("agent-info-session"),
+  apiBase: document.getElementById("api-base"),
+  refreshBtn: document.getElementById("refresh-btn"),
+  loadError: document.getElementById("load-error"),
+  loadMeta: document.getElementById("load-meta"),
+  runtimeGrid: document.getElementById("runtime-grid"),
+  limitsList: document.getElementById("limits-list"),
+  budgetPanel: document.getElementById("budget-panel"),
+  modelsTable: document.querySelector("#models-table tbody"),
+  profilesTable: document.querySelector("#profiles-table tbody"),
+  profileSelect: document.getElementById("profile-select"),
+  profileDetail: document.getElementById("profile-detail"),
+  profileDetailTitle: document.getElementById("profile-detail-title"),
+  profileDescription: document.getElementById("profile-description"),
+  profileTools: document.getElementById("profile-tools"),
+  profileMcp: document.getElementById("profile-mcp"),
+  profileSchemas: document.getElementById("profile-schemas"),
+  ragPanel: document.getElementById("rag-panel"),
+  ragProfileLabel: document.getElementById("rag-profile-label"),
+  endpointList: document.getElementById("endpoint-list"),
 };
 
-async function init() {
-  state.sessionId = sessionStorage.getItem(SESSION_KEY) || crypto.randomUUID();
-  sessionStorage.setItem(SESSION_KEY, state.sessionId);
+let state = {
+  defaultProfile: "",
+  profiles: [],
+};
 
-  setBusy(true);
+function defaultApiBase() {
+  return LOCAL_HOSTS.has(window.location.hostname) ? "http://127.0.0.1:8001" : "";
+}
 
-  await loadProfile();
-  await loadProfiles();
-  await verifyDeepSeek();
+function apiBase() {
+  const value = (els.apiBase.value || "").trim().replace(/\/$/, "");
+  return value;
+}
 
-  els.form().addEventListener("submit", onSubmit);
-  els.newChat().addEventListener("click", onNewChat);
-  els.feed().addEventListener("click", onSuggestionClick);
-  els.agentSelect().addEventListener("change", onAgentChange);
+function saveApiBase() {
+  localStorage.setItem(API_BASE_KEY, apiBase());
+}
 
-  renderAgentInfo();
+function loadApiBase() {
+  els.apiBase.value = localStorage.getItem(API_BASE_KEY) || defaultApiBase();
+}
 
-  if (state.currentModel) {
-    setBusy(false);
-    els.input().focus();
+async function fetchJson(path) {
+  const base = apiBase();
+  if (!base) {
+    throw new Error("Set an API base URL (e.g. http://127.0.0.1:8001)");
   }
-}
-
-async function loadProfile(profileId, {animateBrand = false} = {}) {
-  try {
-    const url = profileId
-      ? `${API_BASE}/api/profile?profile_id=${encodeURIComponent(profileId)}`
-      : `${API_BASE}/api/profile`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    state.profile = await res.json();
-    if (state.profile?.id) {
-      applyProfileBrand(state.profile, {animate: animateBrand});
-      updatePlaceholder(state.profile);
-    }
-    renderProfileIntro();
-    return true;
-  } catch {
-    // Keep the static intro if the backend is older or temporarily unavailable.
-    return false;
-  }
-}
-
-async function loadProfiles() {
-  try {
-    const res = await fetch(`${API_BASE}/api/profiles`);
-    if (res.ok) {
-      const data = await res.json();
-      state.profiles = data.profiles || [];
-    }
-  } catch {
-    // Older backend without /api/profiles — fall through to the single-profile fallback.
-  }
-  // Always show the dropdown. If listing failed, populate it with just the active
-  // profile so the control is discoverable; a backend restart will then surface the rest.
-  if (!state.profiles.length && state.profile) {
-    state.profiles = [{
-      id: state.profile.id,
-      label: state.profile.label,
-      description: state.profile.description,
-      tools: state.profile.tools,
-      mcp_servers: state.profile.mcp_servers || [],
-    }];
-  }
-  populateAgentSelect();
-}
-
-function populateAgentSelect() {
-  const sel = els.agentSelect();
-  if (!sel || !state.profiles.length) return;
-  sel.innerHTML = "";
-  for (const p of state.profiles) {
-    const opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = p.label;
-    if (state.profile && state.profile.id === p.id) opt.selected = true;
-    sel.appendChild(opt);
-  }
-}
-
-async function onAgentChange(e) {
-  const newId = e.target.value;
-  if (!newId || (state.profile && state.profile.id === newId)) return;
-  const previousId = state.profile?.id;
-  setBusy(true);
-  try {
-    const loaded = await loadProfile(newId, {animateBrand: true});
-    if (!loaded) {
-      if (previousId) els.agentSelect().value = previousId;
-      return;
-    }
-    state.sessionUsage = {input: 0, output: 0, reasoning: 0, cache_read: 0, tool_hops: 0};
-    state.lastTurnUsage = [];
-    state.turnTiming = {startedAt: null, firstDeltaAt: null, doneAt: null};
-    resetSession(`switched to ${state.profile?.label || newId}`);
-    renderAgentInfo();
-  } finally {
-    setBusy(false);
-    els.input().focus();
-  }
-}
-
-async function verifyDeepSeek() {
-  try {
-    const res = await fetch(`${API_BASE}/api/models`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const models = data.models || [];
-    if (!models.some(m => m.id === FIXED_MODEL)) {
-      state.currentModel = null;
-      appendError("DeepSeek V4 Flash is not available on the server right now.");
-    }
-  } catch (err) {
-    state.currentModel = null;
-    appendError(`Failed to load model availability: ${err.message}`);
-  }
-}
-
-function onNewChat() {
-  resetSession("new conversation");
-}
-
-function resetSession(reason) {
-  state.sessionId = crypto.randomUUID();
-  sessionStorage.setItem(SESSION_KEY, state.sessionId);
-  state.pendingTools = [];
-  const feed = els.feed();
-  while (feed.children.length > 1) feed.removeChild(feed.lastChild);
-  appendSystem(`(${reason})`);
-}
-
-async function onSubmit(e) {
-  e.preventDefault();
-  if (state.inflight) return;
-  if (!state.currentModel) {
-    appendError("DeepSeek V4 Flash is not loaded. Refresh the page or check the server.");
-    return;
-  }
-  const text = els.input().value.trim();
-  if (!text) return;
-
-  els.input().value = "";
-  setBusy(true);
-  state.lastTurnUsage = [];
-  state.turnTiming = {startedAt: performance.now(), firstDeltaAt: null, doneAt: null};
-  renderAgentInfo();
-
-  appendUser(text);
-  const ctx = {
-    thinkingNode: null,
-    thinkingBuffer: "",
-    agentNode: null,
-    agentBuffer: "",
-  };
-
-  try {
-    await streamChat(text, ctx);
-  } catch (err) {
-    appendError(err.message || String(err));
-  } finally {
-    setBusy(false);
-    els.input().focus();
-  }
-}
-
-function setBusy(busy) {
-  state.inflight = busy;
-  els.input().disabled = busy;
-  els.send().disabled = busy;
-}
-
-async function streamChat(message, ctx) {
-  const res = await fetch(`${API_BASE}/api/chat`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      session_id: state.sessionId,
-      message,
-      model: state.currentModel,
-      profile: state.profile?.id || "strauss",
-    }),
-  });
+  const res = await fetch(`${base}${path}`);
   if (!res.ok) {
-    let detail = `${res.status}`;
-    try { detail = (await res.json()).detail || detail; } catch {}
-    throw new Error(detail);
+    const detail = await res.text();
+    throw new Error(`${path} → ${res.status} ${detail.slice(0, 180)}`);
   }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-
-  while (true) {
-    const {done, value} = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, {stream: true});
-    let idx;
-    while ((idx = buf.indexOf("\n\n")) !== -1) {
-      const frame = buf.slice(0, idx);
-      buf = buf.slice(idx + 2);
-      const ev = frame.match(/^event: (.+)$/m)?.[1];
-      const data = frame.match(/^data: (.+)$/m)?.[1];
-      if (ev && data) {
-        let payload;
-        try { payload = JSON.parse(data); } catch { continue; }
-        handleEvent(ev, payload, ctx);
-      }
-    }
-  }
+  return res.json();
 }
 
-function handleEvent(type, payload, ctx) {
-  switch (type) {
-    case "thinking_delta":
-      if (state.turnTiming.startedAt && !state.turnTiming.firstDeltaAt) {
-        state.turnTiming.firstDeltaAt = performance.now();
-      }
-      if (!ctx.thinkingNode) {
-        ctx.thinkingNode = appendThinking();
-        ctx.thinkingBuffer = "";
-      }
-      ctx.thinkingBuffer += payload.text || "";
-      ctx.thinkingNode.querySelector(".thinking-content").innerHTML =
-        renderMarkdown(ctx.thinkingBuffer);
-      scrollToBottom();
-      break;
-    case "delta":
-      if (state.turnTiming.startedAt && !state.turnTiming.firstDeltaAt) {
-        state.turnTiming.firstDeltaAt = performance.now();
-      }
-      if (!ctx.agentNode) {
-        ctx.agentNode = appendAgent();
-        ctx.agentBuffer = "";
-      }
-      ctx.agentBuffer += payload.text || "";
-      ctx.agentNode.innerHTML = renderMarkdown(ctx.agentBuffer);
-      scrollToBottom();
-      break;
-    case "tool_use_start":
-      ctx.agentNode = null;
-      ctx.agentBuffer = "";
-      ctx.thinkingNode = null;
-      ctx.thinkingBuffer = "";
-      showToolIndicator(payload.name);
-      break;
-    case "tool_result":
-      settleToolIndicator(payload.is_error);
-      break;
-    case "done":
-      settleAllTools(false);
-      state.turnTiming.doneAt = performance.now();
-      renderAgentInfo();
-      break;
-    case "usage":
-      accumulateUsage(payload);
-      break;
-    case "error":
-      settleAllTools(true);
-      state.turnTiming.doneAt = performance.now();
-      appendError(payload.message || "stream error");
-      renderAgentInfo();
-      break;
-  }
+function showError(message) {
+  els.loadError.textContent = message;
+  els.loadError.classList.remove("hidden");
 }
 
-function renderMarkdown(text) {
-  return (window.EasyAgentMarkdown?.renderMarkdown ?? escapeHtml)(text);
+function clearError() {
+  els.loadError.textContent = "";
+  els.loadError.classList.add("hidden");
 }
 
-function appendUser(text) {
-  const div = document.createElement("div");
-  div.className = "msg msg-user";
-  div.textContent = text;
-  els.feed().appendChild(div);
-  scrollToBottom();
+function fmtNumber(value) {
+  return new Intl.NumberFormat().format(Number(value) || 0);
 }
 
-function appendAgent() {
-  const div = document.createElement("div");
-  div.className = "msg msg-agent";
-  els.feed().appendChild(div);
-  scrollToBottom();
-  return div;
+function pct(used, limit) {
+  if (!limit) return 0;
+  return Math.min(100, Math.round((used / limit) * 100));
 }
 
-function appendThinking() {
-  const det = document.createElement("details");
-  det.className = "msg msg-thinking";
-  det.open = true;
-  const sum = document.createElement("summary");
-  sum.textContent = "thinking";
-  det.appendChild(sum);
-  const body = document.createElement("div");
-  body.className = "thinking-content";
-  det.appendChild(body);
-  els.feed().appendChild(det);
-  scrollToBottom();
-  return det;
+function renderStatCards(status) {
+  const { health, budget, registry, defaults } = status;
+  const cards = [
+    ["Status", health.status],
+    ["Sessions", fmtNumber(health.sessions)],
+    ["Native tools", fmtNumber(registry.native_tools)],
+    ["Models live", `${registry.models_available}/${registry.models_configured}`],
+    ["Default profile", defaults.profile],
+    ["Default model", defaults.model],
+    ["Budget left", fmtNumber(budget.remaining)],
+  ];
+  els.runtimeGrid.innerHTML = cards
+    .map(
+      ([label, value]) => `
+        <article class="stat-card">
+          <span class="stat-label">${label}</span>
+          <span class="stat-value">${escapeHtml(String(value))}</span>
+        </article>`
+    )
+    .join("");
 }
 
-function appendSystem(text) {
-  const div = document.createElement("div");
-  div.className = "msg msg-system";
-  const p = document.createElement("p");
-  p.textContent = text;
-  div.appendChild(p);
-  els.feed().appendChild(div);
+function renderLimits(status) {
+  const rows = Object.entries(status.limits).map(([key, value]) => {
+    const label = key.replaceAll("_", " ");
+    return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value))}</dd></div>`;
+  });
+  const ragRows = [
+    ["embedding backend", status.rag.embedding_backend],
+    ["embedding model", status.rag.embedding_model || "—"],
+    ["providers wired", status.registry.providers.join(", ")],
+  ].map(
+    ([label, value]) =>
+      `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value))}</dd></div>`
+  );
+  els.limitsList.innerHTML = rows.join("") + ragRows.join("");
 }
 
-function renderProfileIntro() {
-  const first = els.feed().querySelector(".msg-system");
-  if (!first || !state.profile) return;
-  const pres = profilePresentation(state.profile);
-  first.innerHTML = "";
+function renderBudget(budget) {
+  const usedPct = pct(budget.used, budget.limit);
+  els.budgetPanel.innerHTML = `
+    <div class="budget-bar" aria-hidden="true"><span style="width:${usedPct}%"></span></div>
+    <div class="budget-meta">
+      <span>${fmtNumber(budget.used)} / ${fmtNumber(budget.limit)} tokens (${usedPct}%)</span>
+      <span>date ${escapeHtml(budget.date)} · ${fmtNumber(budget.remaining)} remaining</span>
+    </div>`;
+}
 
-  const wrap = document.createElement("div");
-  wrap.className = "intro-copy";
+function renderModels(modelsPayload) {
+  const defaultId = modelsPayload.default;
+  els.modelsTable.innerHTML = (modelsPayload.models || [])
+    .map((model) => {
+      const isDefault = model.id === defaultId;
+      return `<tr>
+        <td><code>${escapeHtml(model.id)}</code></td>
+        <td>${escapeHtml(model.label)}</td>
+        <td>${escapeHtml(model.vendor)}</td>
+        <td><code>${escapeHtml(model.provider)}</code></td>
+        <td>${isDefault ? '<span class="badge badge-default">default</span>' : ""}</td>
+      </tr>`;
+    })
+    .join("");
+}
 
-  const hello = document.createElement("span");
-  hello.className = "intro-hello";
-  hello.textContent = "Hello, I'm";
-  wrap.appendChild(hello);
+function renderProfiles(profilesPayload) {
+  state.defaultProfile = profilesPayload.default || "";
+  state.profiles = profilesPayload.profiles || [];
+  els.profilesTable.innerHTML = state.profiles
+    .map((profile) => {
+      const isDefault = profile.id === state.defaultProfile;
+      const mcp = (profile.mcp_servers || []).length;
+      return `<tr>
+        <td><code>${escapeHtml(profile.id)}</code></td>
+        <td>${escapeHtml(profile.label)}</td>
+        <td>${profile.tools.length}</td>
+        <td>${mcp ? mcp : "—"}</td>
+        <td>${isDefault ? '<span class="badge badge-default">default</span>' : ""}</td>
+      </tr>`;
+    })
+    .join("");
 
-  const nameWrap = document.createElement("div");
-  nameWrap.className = "intro-name";
-  const mark = document.createElement("pre");
-  mark.className = "profile-mark";
-  if (pres.asciiAriaLabel) mark.setAttribute("aria-label", pres.asciiAriaLabel);
-  mark.textContent = pres.asciiName || state.profile.label || "";
-  nameWrap.appendChild(mark);
-  const period = document.createElement("span");
-  period.className = "intro-period";
-  period.setAttribute("aria-hidden", "true");
-  period.textContent = ".";
-  nameWrap.appendChild(period);
-  wrap.appendChild(nameWrap);
-
-  const rest = document.createElement("span");
-  rest.className = "intro-rest";
-  rest.textContent = pres.introRest || state.profile.welcome || state.profile.description || "";
-  wrap.appendChild(rest);
-  first.appendChild(wrap);
-
-  if (Array.isArray(state.profile.suggestions) && state.profile.suggestions.length) {
-    const hint = document.createElement("div");
-    hint.className = "hint";
-    hint.setAttribute("aria-label", "Suggested prompts");
-    const lead = document.createElement("span");
-    lead.textContent = "Try:";
-    hint.appendChild(lead);
-    state.profile.suggestions.forEach(s => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "suggestion-btn";
-      btn.dataset.suggestion = s;
-      btn.textContent = s;
-      hint.appendChild(btn);
-    });
-    first.appendChild(hint);
+  const current = els.profileSelect.value;
+  els.profileSelect.innerHTML = state.profiles
+    .map(
+      (profile) =>
+        `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.label)} (${escapeHtml(profile.id)})</option>`
+    )
+    .join("");
+  const next = state.profiles.some((p) => p.id === current)
+    ? current
+    : state.defaultProfile || state.profiles[0]?.id || "";
+  if (next) {
+    els.profileSelect.value = next;
   }
 }
 
-function applyProfileBrand(profile, {animate = false} = {}) {
-  const profileId = profile?.id || "";
-  const pres = profilePresentation(profile);
-  const brand = normalizeProfileBrand(profile?.brand, pres.brand);
-  const newAccent = brand.accent;
-  const body = document.body;
-  const prev = body.dataset.profileAccent;
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function renderProfileDetail(profile) {
+  els.profileDetail.classList.remove("hidden");
+  els.profileDetailTitle.textContent = `${profile.label} (${profile.id})`;
+  els.profileDescription.textContent = profile.description || "No description.";
+  els.profileTools.innerHTML = (profile.tools || [])
+    .map((tool) => `<li><code>${escapeHtml(tool)}</code></li>`)
+    .join("");
+  const mcp = profile.mcp_servers || [];
+  els.profileMcp.innerHTML = mcp.length
+    ? mcp.map((name) => `<li><code>${escapeHtml(name)}</code></li>`).join("")
+    : '<li class="muted">none configured</li>';
+  els.profileSchemas.textContent = JSON.stringify(profile.tool_schemas || [], null, 2);
+}
 
-  if (!prev || !animate || reduce) {
-    body.dataset.profile = profileId;
-    body.dataset.profileAccent = newAccent;
-    setProfileBrandVariables(body, brand);
-    updateProfileFace(profileId, pres.face);
+function renderRag(ragPayload, profileId) {
+  els.ragProfileLabel.textContent = profileId ? `profile: ${profileId}` : "";
+  if (!ragPayload.rag_enabled) {
+    els.ragPanel.innerHTML = `<p class="rag-note">${escapeHtml(
+      ragPayload.reason || "RAG not enabled for this profile."
+    )}</p>`;
     return;
   }
-  if (prev === newAccent) {
-    body.dataset.profile = profileId;
-    setProfileBrandVariables(body, brand);
-    updateProfileFace(profileId, pres.face);
+  if (ragPayload.error) {
+    els.ragPanel.innerHTML = `<p class="rag-note is-error">${escapeHtml(ragPayload.error)}</p>`;
     return;
   }
-
-  const oldBanner = getComputedStyle(body).getPropertyValue("--accent-banner").trim();
-
-  body.style.setProperty("--accent-banner-prev", oldBanner);
-  body.dataset.profile = profileId;
-  body.dataset.profileAccent = newAccent;
-  setProfileBrandVariables(body, brand);
-
-  void body.offsetWidth;
-  body.classList.add("is-sweeping");
-
-  window.setTimeout(() => {
-    updateProfileFace(profileId, pres.face);
-  }, 620);
-
-  window.setTimeout(() => {
-    body.classList.remove("is-sweeping");
-    body.style.removeProperty("--accent-banner-prev");
-  }, 760);
+  const staleClass = ragPayload.stale ? "is-warn" : "is-ok";
+  const staleBadge = ragPayload.stale
+    ? '<span class="badge badge-warn">stale</span>'
+    : '<span class="badge badge-ok">current</span>';
+  els.ragPanel.innerHTML = `
+    <div class="rag-grid">
+      <article class="stat-card"><span class="stat-label">Status</span><span class="stat-value">${staleBadge}</span></article>
+      <article class="stat-card"><span class="stat-label">Files</span><span class="stat-value">${fmtNumber(ragPayload.indexed_files)}</span></article>
+      <article class="stat-card"><span class="stat-label">Chunks</span><span class="stat-value">${fmtNumber(ragPayload.indexed_chunks)}</span></article>
+      <article class="stat-card"><span class="stat-label">Embedding</span><span class="stat-value" style="font-size:12px">${escapeHtml(
+        `${ragPayload.embedding_backend}/${ragPayload.embedding_model}`
+      )}</span></article>
+    </div>
+    <p class="rag-note ${staleClass}">${escapeHtml(ragPayload.stale_reason || "Index state unknown.")}</p>
+    <dl class="kv-list">
+      <div><dt>index dir</dt><dd>${escapeHtml(ragPayload.index_dir || "—")}</dd></div>
+      <div><dt>manifest</dt><dd>${ragPayload.manifest_exists ? "yes" : "no"}</dd></div>
+      <div><dt>bm25</dt><dd>${ragPayload.bm25_exists ? "yes" : "no"}</dd></div>
+      <div><dt>vector db</dt><dd>${ragPayload.vector_exists ? "yes" : "no"}</dd></div>
+      <div><dt>dim</dt><dd>${escapeHtml(String(ragPayload.embedding_dim ?? "—"))}</dd></div>
+    </dl>`;
 }
 
-function profilePresentation(profile) {
-  const pres = presentationFor(profile);
-  const brand = profile?.brand && typeof profile.brand === "object" ? profile.brand : {};
-  return {
-    ...pres,
-    asciiName: brand.intro_ascii_name || pres.asciiName,
-    face: brand.hero_icon || pres.face,
-    placeholder: brand.input_placeholder || pres.placeholder,
-  };
+function renderEndpoints() {
+  els.endpointList.innerHTML = ENDPOINTS.map(
+    (item) => `<li><span class="method">${item.method}</span><span><code>${escapeHtml(
+      item.path
+    )}</code> — ${escapeHtml(item.note)}</span></li>`
+  ).join("");
 }
 
-function normalizeProfileBrand(rawBrand, fallback) {
-  const brand = rawBrand && typeof rawBrand === "object" ? rawBrand : {};
-  const source = { ...fallback, ...brand };
-  return {
-    accent: source.accent || fallback.accent,
-    accentDark: source.accent_dark || fallback.accentDark,
-    accentSoft: source.accent_soft || fallback.accentSoft,
-    grid: source.grid || fallback.grid,
-    mark: source.accent_gold || source.mark || fallback.mark || source.accent,
-  };
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
-function setProfileBrandVariables(body, brand) {
-  body.style.setProperty("--profile-accent", brand.accent);
-  body.style.setProperty("--profile-accent-dark", brand.accentDark);
-  body.style.setProperty("--profile-accent-soft", brand.accentSoft);
-  body.style.setProperty("--profile-grid", brand.grid);
-  body.style.setProperty("--profile-mark", brand.mark);
-  body.style.setProperty("--accent-banner", brand.accent);
-}
-
-function updateProfileFace(profileId, faceText) {
-  const face = document.querySelector(".lb-face");
-  if (!face || !faceText) return;
-  face.textContent = faceText;
-  face.dataset.agent = profileId;
-}
-
-function updatePlaceholder(profile) {
-  const input = els.input();
-  if (!input) return;
-  input.placeholder = profilePresentation(profile).placeholder;
-}
-
-function onSuggestionClick(e) {
-  const button = e.target.closest("[data-suggestion]");
-  if (!button || state.inflight) return;
-  els.input().value = button.dataset.suggestion || button.textContent;
-  els.input().focus();
-}
-
-function accumulateUsage(payload) {
-  state.lastTurnUsage.push(payload);
-  state.sessionUsage.input += Number(payload.input_tokens) || 0;
-  state.sessionUsage.output += Number(payload.output_tokens) || 0;
-  state.sessionUsage.reasoning += Number(payload.reasoning_tokens) || 0;
-  state.sessionUsage.cache_read += Number(payload.cache_read_input_tokens) || 0;
-  state.sessionUsage.tool_hops += 1;
-  renderAgentInfo();
-}
-
-function renderAgentInfo() {
-  const p = state.profile;
-  if (els.agentDesc()) {
-    els.agentDesc().textContent = (p && p.description) || "—";
+async function loadProfileDetail(profileId) {
+  if (!profileId) {
+    els.profileDetail.classList.add("hidden");
+    return;
   }
-  if (els.agentTools()) {
-    const tools = (p && Array.isArray(p.tools)) ? p.tools : [];
-    els.agentTools().textContent = tools.length ? tools.join(", ") : "—";
-  }
-  if (els.agentMcp()) {
-    const mcp = (p && Array.isArray(p.mcp_servers)) ? p.mcp_servers : [];
-    els.agentMcp().textContent = mcp.length ? mcp.join(", ") : "none configured";
-  }
-  if (els.agentLast()) {
-    if (!state.lastTurnUsage.length) {
-      els.agentLast().textContent = "—";
-    } else {
-      els.agentLast().textContent = state.lastTurnUsage
-        .map(u => {
-          const inT = Number(u.input_tokens) || 0;
-          const outT = Number(u.output_tokens) || 0;
-          return `hop ${u.hop} (${u.category || "?"}) ${inT}/${outT}`;
-        })
-        .join(" · ");
-    }
-  }
-  if (els.agentSpeed()) {
-    const t = state.turnTiming;
-    if (!t.startedAt) {
-      els.agentSpeed().textContent = "—";
-    } else {
-      const parts = [];
-      if (t.firstDeltaAt) {
-        parts.push(`TTFT ${Math.round(t.firstDeltaAt - t.startedAt)} ms`);
-      }
-      if (t.doneAt && t.firstDeltaAt) {
-        const totalOut = state.lastTurnUsage.reduce(
-          (sum, u) => sum + (Number(u.output_tokens) || 0), 0,
-        );
-        const elapsedSec = (t.doneAt - t.firstDeltaAt) / 1000;
-        if (totalOut > 0 && elapsedSec > 0) {
-          parts.push(`TPS ${Math.round(totalOut / elapsedSec)} t/s`);
-        }
-      }
-      els.agentSpeed().textContent = parts.length ? parts.join(" · ") : "measuring…";
-    }
-  }
-  if (els.agentSession()) {
-    const s = state.sessionUsage;
-    const reasoningPart = s.reasoning > 0 ? ` (reasoning ${s.reasoning})` : "";
-    const hopLabel = s.tool_hops === 1 ? "hop" : "hops";
-    els.agentSession().textContent =
-      `in ${s.input} · out ${s.output}${reasoningPart} · cache ${s.cache_read} · ${s.tool_hops} ${hopLabel}`;
+  const profile = await fetchJson(`/api/profile?profile_id=${encodeURIComponent(profileId)}`);
+  renderProfileDetail(profile);
+  // /api/profile is intentionally cheap and no longer embeds rag_index; fetch
+  // RAG health from the dedicated endpoint.
+  const ragIndex = await fetchJson(`/api/rag/index?profile_id=${encodeURIComponent(profileId)}`);
+  renderRag(ragIndex || {}, profileId);
+}
+
+async function refreshDashboard() {
+  clearError();
+  saveApiBase();
+  const started = performance.now();
+  try {
+    const [status, models, profiles] = await Promise.all([
+      fetchJson("/api/status"),
+      fetchJson("/api/models"),
+      fetchJson("/api/profiles"),
+    ]);
+    renderStatCards(status);
+    renderLimits(status);
+    renderBudget(status.budget);
+    renderModels(models);
+    renderProfiles(profiles);
+    renderEndpoints();
+    const profileId = els.profileSelect.value || state.defaultProfile;
+    await loadProfileDetail(profileId);
+    const ms = Math.round(performance.now() - started);
+    els.loadMeta.textContent = `Updated ${new Date().toLocaleTimeString()} · ${apiBase()} · ${ms}ms`;
+  } catch (err) {
+    showError(err instanceof Error ? err.message : String(err));
+    els.loadMeta.textContent = "";
   }
 }
 
-function appendError(text) {
-  const div = document.createElement("div");
-  div.className = "msg msg-error";
-  div.textContent = text;
-  els.feed().appendChild(div);
-}
+els.refreshBtn.addEventListener("click", () => {
+  refreshDashboard();
+});
 
-function showToolIndicator(toolName) {
-  const div = document.createElement("div");
-  div.className = "msg msg-tool";
-  div.innerHTML = `running <strong>${escapeHtml(toolName)}</strong><span class="dots"></span>`;
-  els.feed().appendChild(div);
-  state.pendingTools.push(div);
-  scrollToBottom();
-}
+els.apiBase.addEventListener("change", () => {
+  refreshDashboard();
+});
 
-function settleToolIndicator(isError) {
-  const node = state.pendingTools.shift();
-  if (!node) return;
-  const dots = node.querySelector(".dots");
-  if (dots) {
-    const tail = document.createElement("span");
-    tail.className = "tool-tail";
-    tail.textContent = isError ? " · error" : " · done";
-    dots.replaceWith(tail);
+els.profileSelect.addEventListener("change", async () => {
+  clearError();
+  try {
+    await loadProfileDetail(els.profileSelect.value);
+  } catch (err) {
+    showError(err instanceof Error ? err.message : String(err));
   }
-  node.classList.add(isError ? "is-error" : "is-done");
-}
+});
 
-function settleAllTools(isError) {
-  while (state.pendingTools.length) settleToolIndicator(isError);
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  }[c]));
-}
-
-function scrollToBottom() {
-  window.scrollTo({top: document.body.scrollHeight, behavior: "smooth"});
-}
-
-init();
+loadApiBase();
+renderEndpoints();
+refreshDashboard();

@@ -18,7 +18,7 @@ declare -A REPO_MAP=(
 declare -A BUILD_CMD=(
 
     ["Sendaway"]="npm install && npm run deploy"
-    ["easyagent"]="systemctl restart easyagent"
+    ["easyagent"]="for p in personal-agent customer-service frampton; do .venv/bin/python -m backend.rag.cli build \"\$p\" || echo \"WARN: rag build failed for \$p\"; done; systemctl restart easyagent"
 )
 
 # Repos that need Docker container rebuild after pull

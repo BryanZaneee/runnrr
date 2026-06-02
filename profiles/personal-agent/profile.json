@@ -1,0 +1,69 @@
+{
+  "id": "personal-agent",
+  "label": "Personal Agent",
+  "description": "Personal candidate-advocate agent for Bryan Zane Smith.",
+  "kb_root": "kb",
+  "system_prompt_path": "profiles/personal-agent/system.md",
+  "tools": [
+    "list_kb",
+    "read_file",
+    "search_kb",
+    "semantic_search_kb",
+    "get_resume_summary",
+    "get_project_context",
+    "web_search"
+  ],
+  "tool_descriptions": {
+    "get_resume_summary": "Return Bryan's resume in markdown. Use for any question about employment history, education, certifications, or overall qualifications — faster than read_file('resume/resume.md').",
+    "get_project_context": "Return a curated PITCH summary for one of Bryan's projects (the 'why it matters' angle). Use when a recruiter asks about a specific project — answers like 'tell me about X' or 'is X relevant to Y role'. For technical detail (stack, key files, architecture), the system context already includes a quick_info cheat sheet — no tool call needed for that."
+  },
+  "project_aliases": {
+    "bryanzane.com": "bryanzane-com",
+    "bryanzane": "bryanzane-com",
+    "bryan zane": "bryanzane-com",
+    "bryanzanecom": "bryanzane-com",
+    "infinichat_rn": "infinichat",
+    "infinichat-rn": "infinichat",
+    "infinichat.ai": "infinichat",
+    "shuttrr.com": "shuttrr",
+    "ftrmsg.com": "ftrmsg",
+    "esmebelle": "esme",
+    "esmebelle.studio": "esme",
+    "esme belle": "esme",
+    "esmé belle": "esme",
+    "ayopapo.studio": "ayopapo",
+    "ayo papo": "ayopapo",
+    "papo": "ayopapo"
+  },
+  "source_labels": {
+    "anywhere": "Anywhere",
+    "ayopapo": "Ayopapo",
+    "bryanzane-com": "Bryanzane.com",
+    "esme": "Esme",
+    "ftrmsg": "Ftrmsg",
+    "infinichat": "Infinichat",
+    "llmbench": "LLM Bench",
+    "physiq": "Physiq",
+    "shuttrr": "Shuttrr",
+    "widget": "Widget"
+  },
+  "source_path_labels": [
+    ["resume/resume.md", "Resume"],
+    ["codebases/", "Codebase reference"],
+    ["meta/", "Portfolio knowledge base"]
+  ],
+  "brand": {
+    "accent": "#386f3d",
+    "accent_dark": "#1f4d28",
+    "accent_soft": "#e8f3e6",
+    "hero_icon": " (...)\n  ^^\n /--\\",
+    "intro_ascii_name": " ____                                 _    _                    _   \n|  _ \\ ___ _ __ ___  ___  _ __   __ _| |  / \\   __ _  ___ _ __ | |_ \n| |_) / _ \\ '__/ __|/ _ \\| '_ \\ / _` | | / _ \\ / _` |/ _ \\ '_ \\| __|\n|  __/  __/ |  \\__ \\ (_) | | | | (_| | |/ ___ \\ (_| |  __/ | | | |_ \n|_|   \\___|_|  |___/\\___/|_| |_|\\__,_|_/_/   \\_\\__, |\\___|_| |_|\\__|\n                                                |___/               ",
+    "input_placeholder": "ask Personal Agent about Bryan..."
+  },
+  "welcome": "I answer questions about Bryan grounded in his resume and codebases. I won't make things up; if a fact isn't there, I'll say so.",
+  "suggestions": [
+    "What's Bryan's strongest project?",
+    "Has he done agent work?",
+    "Tell me about Shuttrr."
+  ]
+}

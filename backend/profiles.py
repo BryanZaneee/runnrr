@@ -1,9 +1,9 @@
 """Agent profile loading.
 
 Profiles keep persona and knowledge-base choices out of the reusable EasyAgent
-engine. The bundled `strauss` example profile lives under profiles/strauss/, but
-the engine can run another profile by loading a different profile.json + system
-prompt.
+engine. The bundled `personal-agent` example profile lives under
+profiles/personal-agent/, but the engine can run another profile by loading a
+different profile.json + system prompt.
 
 The `mcp_servers` field on a profile is parsed and stored, but no MCP client is
 wired up yet — that integration is a follow-up task. See backend/agent.py for
@@ -14,17 +14,21 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from backend.config import DEFAULT_PROFILE, KB_ROOT, PROFILE_ROOT
+from backend.kb_loader import iter_kb_files
+from backend.types import BrandMetadata
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# Generic defaults only. Personal-site shortcuts (get_resume_summary,
+# get_project_context) live in backend/tools/personal_kb.py and must be opted
+# into via a profile's "tools" list — they are deliberately NOT defaults so a
+# business profile never inherits portfolio-specific tooling.
 DEFAULT_PROFILE_TOOLS: tuple[str, ...] = (
     "list_kb",
     "read_file",
     "search_kb",
-    "get_resume_summary",
-    "get_project_context",
     "web_search",
 )
 
@@ -33,13 +37,11 @@ MANIFEST_MAX_FILES_PER_CATEGORY = 30
 MANIFEST_MAX_TOP_LEVEL_FILES = 40
 
 
-def _category_filenames(category_dir: Path) -> list[str]:
+def _category_filenames(kb_root: Path, category: str) -> list[str]:
     """Return deduped, sorted basenames (no extension) of markdown files under a category."""
     seen: set[str] = set()
-    for path in category_dir.rglob("*.md"):
-        if path.name.startswith(".") or "__pycache__" in path.parts:
-            continue
-        seen.add(path.stem)
+    for rel_path, _path in iter_kb_files(category, root=kb_root, pattern="*.md"):
+        seen.add(Path(rel_path).stem)
     return sorted(seen, key=str.lower)
 
 
@@ -64,26 +66,31 @@ def build_kb_manifest(kb_root: Path) -> str:
     if not kb_root.exists() or not kb_root.is_dir():
         return ""
 
-    children = [p for p in kb_root.iterdir() if not p.name.startswith(".")]
-
+    markdown_files = list(iter_kb_files(root=kb_root, pattern="*.md"))
     top_files = sorted(
-        (p.stem for p in children if p.is_file() and p.suffix == ".md"),
+        (Path(rel_path).stem
+        for rel_path, _path in markdown_files
+        if len(Path(rel_path).parts) == 1),
         key=str.lower,
     )
     subdirs = sorted(
-        (p for p in children if p.is_dir()),
-        key=lambda p: p.name.lower(),
+        {
+            Path(rel_path).parts[0]
+            for rel_path, _path in markdown_files
+            if len(Path(rel_path).parts) > 1
+        },
+        key=str.lower,
     )
 
     lines: list[str] = []
     if top_files:
         lines.append("Top-level: " + _format_filenames(top_files, MANIFEST_MAX_TOP_LEVEL_FILES))
-    for d in subdirs:
-        files = _category_filenames(d)
+    for category in subdirs:
+        files = _category_filenames(kb_root, category)
         if not files:
             continue
         lines.append(
-            f"{d.name}/: " + _format_filenames(files, MANIFEST_MAX_FILES_PER_CATEGORY)
+            f"{category}/: " + _format_filenames(files, MANIFEST_MAX_FILES_PER_CATEGORY)
         )
 
     if not lines:
@@ -101,9 +108,17 @@ class AgentProfile:
     welcome: str = ""
     suggestions: tuple[str, ...] = ()
     tools: tuple[str, ...] = DEFAULT_PROFILE_TOOLS
-    brand: dict[str, Any] = field(default_factory=dict)
+    tool_descriptions: dict[str, str] = field(default_factory=dict)
+    brand: BrandMetadata = field(default_factory=dict)
     data_root: Path | None = None
     mcp_servers: tuple[dict, ...] = ()
+    project_aliases: dict[str, str] = field(default_factory=dict)
+    source_labels: dict[str, str] = field(default_factory=dict)
+    # Ordered (match, label) pairs mapping KB paths to public source labels.
+    # A match ending in "/" is a prefix match; otherwise an exact-path match.
+    # Tried in declared order, first match wins, so list exact paths before
+    # the prefixes they fall under. Case-sensitive (unlike source_labels).
+    source_path_labels: tuple[tuple[str, str], ...] = ()
 
 
 def _project_path(value: str | None, fallback: Path) -> Path:
@@ -115,25 +130,24 @@ def _project_path(value: str | None, fallback: Path) -> Path:
     return p.resolve()
 
 
-def load_profile(profile_id: str | None = None) -> AgentProfile:
-    """Load a profile by id. Falls back to the legacy KB root if no file exists."""
+def _brand_metadata(value: Any) -> BrandMetadata:
+    """Parse profile brand metadata while keeping the public shape dict-like."""
+    return cast(BrandMetadata, dict(value or {}))
+
+
+def load_profile(
+    profile_id: str | None = None,
+    *,
+    profile_root: Path | None = None,
+) -> AgentProfile:
+    """Load a profile by id. Missing profile.json is an explicit configuration error."""
     pid = profile_id or DEFAULT_PROFILE
-    profile_dir = (PROFILE_ROOT / pid).resolve()
+    root = (profile_root or PROFILE_ROOT).resolve()
+    profile_dir = (root / pid).resolve()
     cfg_path = profile_dir / "profile.json"
 
     if not cfg_path.exists():
-        if profile_id is not None and pid != DEFAULT_PROFILE:
-            raise FileNotFoundError(cfg_path)
-        return AgentProfile(
-            id=pid,
-            label=pid.title(),
-            description="Default profile",
-            kb_root=KB_ROOT,
-            system_prompt=(
-                "You are an AI agent. Answer using the available knowledge-base tools. "
-                "If the knowledge base does not contain a fact, say so."
-            ),
-        )
+        raise FileNotFoundError(cfg_path)
 
     cfg: dict[str, Any] = json.loads(cfg_path.read_text(encoding="utf-8"))
     system_path = _project_path(cfg.get("system_prompt_path"), profile_dir / "system.md")
@@ -158,7 +172,21 @@ def load_profile(profile_id: str | None = None) -> AgentProfile:
         welcome=cfg.get("welcome", ""),
         suggestions=tuple(cfg.get("suggestions", ())),
         tools=tuple(cfg.get("tools", DEFAULT_PROFILE_TOOLS)),
-        brand=cfg.get("brand", {}),
+        tool_descriptions=dict(cfg.get("tool_descriptions", {})),
+        brand=_brand_metadata(cfg.get("brand", {})),
         data_root=data_root,
         mcp_servers=tuple(cfg.get("mcp_servers", ())),
+        project_aliases={
+            str(k).lower(): str(v)
+            for k, v in dict(cfg.get("project_aliases", {})).items()
+        },
+        source_labels={
+            str(k).lower(): str(v)
+            for k, v in dict(cfg.get("source_labels", {})).items()
+        },
+        source_path_labels=tuple(
+            (str(pair[0]), str(pair[1]))
+            for pair in cfg.get("source_path_labels", [])
+            if isinstance(pair, (list, tuple)) and len(pair) == 2
+        ),
     )

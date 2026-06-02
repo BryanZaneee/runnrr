@@ -3,7 +3,8 @@ name = "easyagent"
 version = "0.1.0"
 description = "EasyAgent — portable framework for reusable agentic AI across Anthropic, OpenAI, Gemini, Moonshot Kimi, and DeepSeek."
 readme = "README.md"
-requires-python = ">=3.11"
+# voyageai (default RAG backend) does not support Python 3.14+ yet.
+requires-python = ">=3.11,<3.14"
 authors = [{ name = "Bryan Zane Smith", email = "bzane09@gmail.com" }]
 license = { text = "MIT" }
 
@@ -19,6 +20,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+rag = [
+    "sqlite-vec>=0.1.6",
+    "voyageai>=0.3.0",
+]
+rag-local = [
+    "sentence-transformers>=3.0.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",

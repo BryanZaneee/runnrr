@@ -1,0 +1,91 @@
+"""Tool dispatch envelope."""
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+
+from backend import config
+from backend.kb_loader import KBError
+from backend.profiles import AgentProfile
+from backend.tool_errors import ToolExecutionError
+from backend.tools.definitions import ToolContext
+from backend.tools.registry import TOOL_HANDLERS
+from backend.tools.results import ToolResult, _tool_result
+from backend.web_search import WebSearchError
+
+log = logging.getLogger("easyagent.tools")
+
+
+def run_tool(
+    name: str,
+    arguments: dict,
+    tool_use_id: str,
+    *,
+    root: Path | None = None,
+    data_root: Path | None = None,
+    profile: AgentProfile | None = None,
+    allowed_tools: tuple[str, ...] | list[str] | set[str] | None = None,
+) -> ToolResult:
+    """Dispatch a tool call. Catches expected tool errors into `is_error=True`."""
+    context = ToolContext(root=root, data_root=data_root, profile=profile)
+    try:
+        if allowed_tools is not None and name not in set(allowed_tools):
+            return _tool_result(
+                tool_use_id=tool_use_id,
+                name=name,
+                content=json.dumps({"error": f"tool not enabled for this profile: {name}"}),
+                is_error=True,
+                arguments=arguments,
+                context=context,
+            )
+        handler = TOOL_HANDLERS.get(name)
+        if handler is None:
+            return _tool_result(
+                tool_use_id=tool_use_id,
+                name=name,
+                content=json.dumps({"error": f"unknown tool: {name}"}),
+                is_error=True,
+                arguments=arguments,
+                context=context,
+            )
+        out = handler(arguments, context)
+        return _tool_result(
+            tool_use_id=tool_use_id,
+            name=name,
+            content=json.dumps(out, ensure_ascii=False),
+            is_error=False,
+            arguments=arguments,
+            output=out,
+            context=context,
+        )
+    except (KBError, WebSearchError, ToolExecutionError) as e:
+        return _tool_result(
+            tool_use_id=tool_use_id,
+            name=name,
+            content=json.dumps({"error": str(e)}),
+            is_error=True,
+            arguments=arguments,
+            context=context,
+        )
+    except KeyError as e:
+        return _tool_result(
+            tool_use_id=tool_use_id,
+            name=name,
+            content=json.dumps({"error": f"missing required argument: {e.args[0]}"}),
+            is_error=True,
+            arguments=arguments,
+            context=context,
+        )
+    except Exception as e:
+        log.exception("tool %s failed unexpectedly", name)
+        if config.TOOL_DEBUG_ERRORS:
+            raise
+        return _tool_result(
+            tool_use_id=tool_use_id,
+            name=name,
+            content=json.dumps({"error": "tool failed unexpectedly"}),
+            is_error=True,
+            arguments=arguments,
+            context=context,
+        )

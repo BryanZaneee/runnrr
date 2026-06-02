@@ -11,16 +11,19 @@ from google.genai import types
 from backend.profiles import AgentProfile
 from backend.providers.base import Event
 from backend.tools import ToolResult, schemas_for_tools
+from backend.types import ProviderMessage, UsagePayload
 
 
 class GeminiProvider:
     def __init__(self, *, api_key_env: str = "GEMINI_API_KEY", client: Any | None = None) -> None:
         self.client = client or genai.Client(api_key=os.environ[api_key_env])
 
-    def format_user(self, text: str) -> Any:
+    def format_user(self, text: str) -> ProviderMessage:
         return types.Content(role="user", parts=[types.Part.from_text(text=text)])
 
-    def append_tool_results(self, messages: list, results: list[ToolResult]) -> None:
+    def append_tool_results(
+        self, messages: list[ProviderMessage], results: list[ToolResult]
+    ) -> None:
         parts = []
         for r in results:
             parts.append(
@@ -41,7 +44,10 @@ class GeminiProvider:
                 description=s["description"],
                 parameters_json_schema=s["input_schema"],
             )
-            for s in schemas_for_tools(profile.tools)
+            for s in schemas_for_tools(
+                profile.tools,
+                description_overrides=profile.tool_descriptions,
+            )
         ]
         return [types.Tool(function_declarations=declarations)]
 
@@ -52,7 +58,7 @@ class GeminiProvider:
         self,
         *,
         model: str,
-        messages: list,
+        messages: list[ProviderMessage],
         system: Any,
         tools: list,
         max_tokens: int,
@@ -73,7 +79,7 @@ class GeminiProvider:
         text_parts: list[str] = []
         function_parts: list[Any] = []
         announced_tool_names: set[str] = set()
-        usage: dict[str, int] | None = None
+        usage: UsagePayload | None = None
 
         async for chunk in response_stream:
             text = _chunk_text(chunk)
@@ -145,7 +151,7 @@ def _chunk_parts(chunk: Any) -> list[Any]:
     return parts
 
 
-def _norm_usage(u: Any) -> dict:
+def _norm_usage(u: Any) -> UsagePayload:
     # Gemini thinking models report `thoughts_token_count` separately from
     # `candidates_token_count`. Expose as reasoning_tokens so the UI can show
     # the breakdown alongside other providers.

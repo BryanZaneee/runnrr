@@ -7,7 +7,8 @@
   "tools": [
     "list_kb",
     "read_file",
-    "search_kb"
+    "search_kb",
+    "semantic_search_kb"
   ],
   "inject_kb_manifest": true,
   "mcp_servers": [],

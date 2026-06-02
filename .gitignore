@@ -20,4 +20,6 @@ uv.lock.bak
 kb/*
 !kb/README.md
 !kb/frampton/
+profiles/*/.index/
+profiles/*/evals/runs/
 .playwright-mcp/

@@ -16,7 +16,7 @@ def test_customer_service_profile_loads():
     p = load_profile("customer-service")
     assert p.id == "customer-service"
     assert p.label == "Customer Service"
-    assert p.tools == ("list_kb", "read_file", "search_kb")
+    assert p.tools == ("list_kb", "read_file", "search_kb", "semantic_search_kb")
     assert p.mcp_servers == ()
     assert p.brand["accent"] == "#f0642f"
     assert p.brand["intro_ascii_name"]
@@ -25,11 +25,11 @@ def test_customer_service_profile_loads():
     assert len(p.suggestions) == 3
 
 
-def test_strauss_profile_brand_loads():
-    p = load_profile("strauss")
+def test_personal_agent_profile_brand_loads():
+    p = load_profile("personal-agent")
     assert p.brand["accent"] == "#386f3d"
     assert p.brand["intro_ascii_name"]
-    assert "Strauss" in p.brand["input_placeholder"]
+    assert "Personal Agent" in p.brand["input_placeholder"]
     assert p.data_root is None
 
 
@@ -166,7 +166,7 @@ def test_api_profiles_lists_both_bundled_profiles(client):
     body = r.json()
     assert "default" in body
     ids = {p["id"] for p in body["profiles"]}
-    assert {"strauss", "customer-service", "research-analyst", "sales-concierge"} <= ids
+    assert {"personal-agent", "customer-service", "research-analyst", "sales-concierge"} <= ids
 
 
 def test_api_profiles_includes_tools_and_mcp_servers(client):
@@ -174,7 +174,7 @@ def test_api_profiles_includes_tools_and_mcp_servers(client):
     body = r.json()
     cs = next(p for p in body["profiles"] if p["id"] == "customer-service")
     assert cs["label"] == "Customer Service"
-    assert cs["tools"] == ["list_kb", "read_file", "search_kb"]
+    assert cs["tools"] == ["list_kb", "read_file", "search_kb", "semantic_search_kb"]
     assert cs["mcp_servers"] == []
     assert cs["brand"]["accent"] == "#f0642f"
 
@@ -184,7 +184,7 @@ def test_api_profile_includes_allowed_tool_schemas(client):
     assert r.status_code == 200
     body = r.json()
 
-    assert body["tools"] == ["list_kb", "read_file", "search_kb"]
+    assert body["tools"] == ["list_kb", "read_file", "search_kb", "semantic_search_kb"]
     assert body["brand"]["accent"] == "#f0642f"
     schemas = body["tool_schemas"]
     assert [schema["name"] for schema in schemas] == body["tools"]

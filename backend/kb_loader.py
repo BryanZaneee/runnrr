@@ -6,6 +6,7 @@ filesystem op. Read-only. No write operations exist by design.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 from backend.config import KB_ROOT
@@ -16,28 +17,9 @@ DEFAULT_LINES_PER_READ = 400
 LIST_ROOT_DEPTH = 1
 LIST_SUBDIR_DEPTH = 2
 
-# Aliases the model might use for project lookup. Maps lowercase input → file slug under kb/projects/.
-# Files not in this map can still be looked up by their exact slug.
-PROJECT_ALIASES: dict[str, str] = {
-    "bryanzane.com": "bryanzane-com",
-    "bryanzane": "bryanzane-com",
-    "bryan zane": "bryanzane-com",
-    "bryanzanecom": "bryanzane-com",
-    "infinichat_rn": "infinichat",
-    "infinichat-rn": "infinichat",
-    "infinichat.ai": "infinichat",
-    "shuttrr.com": "shuttrr",
-    "ftrmsg.com": "ftrmsg",
-    "esmebelle": "esme",
-    "esmebelle.studio": "esme",
-    "esme belle": "esme",
-    "esmé belle": "esme",
-    "ayopapo.studio": "ayopapo",
-    "ayo papo": "ayopapo",
-    "papo": "ayopapo",
-}
-
-
+# Aliases the model might use for project lookup. Maps lowercase input → file slug
+# under kb/projects/. Profile-specific aliases live in profile.json; this module
+# accepts them via the `aliases` argument to get_project_context().
 class KBError(Exception):
     """Raised for any KB violation (path escape, missing file, bad arg)."""
 
@@ -63,6 +45,40 @@ def _safe_resolve(rel: str, *, root: Path | None = None) -> Path:
     return candidate
 
 
+def _ignored_path(path: Path) -> bool:
+    return path.name.startswith(".") or "__pycache__" in path.parts
+
+
+def iter_kb_files(
+    subdir: str = "",
+    *,
+    root: Path | None = None,
+    pattern: str = "*",
+) -> Iterator[tuple[str, Path]]:
+    """Yield safe ``(relative_path, resolved_path)`` file pairs under a KB root."""
+    base_rel = subdir if subdir else "."
+    base = _safe_resolve(base_rel, root=root)
+    root_resolved = _root(root)
+    if not base.exists() or not base.is_dir():
+        return
+
+    for path in sorted(base.rglob(pattern)):
+        if _ignored_path(path):
+            continue
+        try:
+            rel = path.relative_to(root_resolved).as_posix()
+            resolved = _safe_resolve(rel, root=root_resolved)
+        except (KBError, ValueError):
+            continue
+        if resolved.is_file():
+            yield rel, resolved
+
+
+def iter_markdown_files(*, root: Path | None = None) -> Iterator[tuple[str, Path]]:
+    """Yield markdown files using the same path trust boundary as runtime KB tools."""
+    yield from iter_kb_files(root=root, pattern="*.md")
+
+
 def list_kb(subdir: str = "", *, root: Path | None = None) -> list[dict]:
     """List entries under `subdir`. Hidden/junk paths skipped.
 
@@ -83,14 +99,22 @@ def list_kb(subdir: str = "", *, root: Path | None = None) -> list[dict]:
     for entry in sorted(base.rglob("*")):
         if len(entry.relative_to(base).parts) > max_depth:
             continue
-        if entry.name.startswith(".") or "__pycache__" in entry.parts:
+        if _ignored_path(entry):
             continue
-        rel_to_root = entry.relative_to(root_resolved).as_posix()
+        try:
+            rel_to_root = entry.relative_to(root_resolved).as_posix()
+            resolved = _safe_resolve(rel_to_root, root=root_resolved)
+        except (KBError, ValueError):
+            continue
+        is_file = resolved.is_file()
+        is_dir = resolved.is_dir()
+        if not is_file and not is_dir:
+            continue
         out.append(
             {
                 "path": rel_to_root,
-                "size_bytes": entry.stat().st_size if entry.is_file() else 0,
-                "kind": "file" if entry.is_file() else "dir",
+                "size_bytes": resolved.stat().st_size if is_file else 0,
+                "kind": "file" if is_file else "dir",
             }
         )
     return out
@@ -153,10 +177,6 @@ def search_kb(
     """Substring (case-insensitive) or regex search across KB files. Returns matches with context."""
     if not query:
         raise KBError("query must not be empty")
-    base_rel = subdir if subdir else "."
-    base = _safe_resolve(base_rel, root=root)
-    root_resolved = _root(root)
-
     if regex:
         try:
             pat = re.compile(query, re.IGNORECASE)
@@ -168,14 +188,11 @@ def search_kb(
         matcher = lambda line: ql in line.lower()
 
     results: list[dict] = []
-    for path in sorted(base.rglob("*")):
-        if not path.is_file() or path.name.startswith("."):
-            continue
+    for rel, path in iter_kb_files(subdir, root=root):
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        rel = path.relative_to(root_resolved).as_posix()
         size = path.stat().st_size
         lines = text.splitlines()
         for i, line in enumerate(lines, 1):
@@ -191,28 +208,3 @@ def search_kb(
                 if len(results) >= max_results:
                     return results
     return results
-
-
-def get_resume_summary(*, root: Path | None = None) -> dict:
-    """Specialized: return resume.md as if read_file was called on it."""
-    return read_file("resume/resume.md", root=root)
-
-
-def get_project_context(project_name: str, *, root: Path | None = None) -> dict:
-    """Specialized: return the curated pitch summary for a named project.
-
-    Tries the literal slug first (e.g., 'shuttrr' → projects/shuttrr.md), falls back to
-    PROJECT_ALIASES for friendly names ('bryanzane.com' → projects/bryanzane-com.md).
-    """
-    name = (project_name or "").lower().strip()
-    if not name:
-        raise KBError("project_name must not be empty")
-    slug = PROJECT_ALIASES.get(name, name)
-    rel = f"projects/{slug}.md"
-    try:
-        loaded = read_file(rel, root=root)
-    except KBError:
-        raise KBError(
-            f"no project file for '{project_name}'. Try list_kb(subdir='projects') to see what's available."
-        )
-    return {"project": slug, "summary": loaded["content"]}

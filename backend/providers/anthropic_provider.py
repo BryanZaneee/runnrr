@@ -10,6 +10,7 @@ from anthropic import AsyncAnthropic
 from backend.profiles import AgentProfile
 from backend.providers.base import Event
 from backend.tools import ToolResult, schemas_for_tools
+from backend.types import ProviderMessage, UsagePayload
 
 
 class AnthropicProvider:
@@ -20,10 +21,12 @@ class AnthropicProvider:
         # max_tokens upward if the caller's value would underflow.
         self.thinking_budget = thinking_budget
 
-    def format_user(self, text: str) -> dict:
+    def format_user(self, text: str) -> ProviderMessage:
         return {"role": "user", "content": text}
 
-    def append_tool_results(self, messages: list, results: list[ToolResult]) -> None:
+    def append_tool_results(
+        self, messages: list[ProviderMessage], results: list[ToolResult]
+    ) -> None:
         messages.append(
             {
                 "role": "user",
@@ -40,7 +43,10 @@ class AnthropicProvider:
         )
 
     def tools_for_provider(self, profile: AgentProfile) -> list[dict]:
-        return schemas_for_tools(profile.tools)
+        return schemas_for_tools(
+            profile.tools,
+            description_overrides=profile.tool_descriptions,
+        )
 
     def system_for_provider(self, profile: AgentProfile) -> Any:
         return [{"type": "text", "text": profile.system_prompt}]
@@ -49,7 +55,7 @@ class AnthropicProvider:
         self,
         *,
         model: str,
-        messages: list,
+        messages: list[ProviderMessage],
         system: Any,
         tools: list,
         max_tokens: int,
@@ -126,7 +132,7 @@ def _estimate_thinking_tokens(content: list, total_output_tokens: int) -> int:
     return int(total_output_tokens * thinking_chars / total)
 
 
-def _norm_usage(u: Any, thinking_tokens: int = 0) -> dict:
+def _norm_usage(u: Any, thinking_tokens: int = 0) -> UsagePayload:
     # Anthropic streaming usage rolls extended-thinking tokens into output_tokens
     # without a per-stream split. When thinking_tokens is supplied (estimated from
     # content-block character lengths), expose it on reasoning_tokens and subtract

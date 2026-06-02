@@ -4,9 +4,296 @@ A running log of decisions that future agents (or future-me) can't recover from 
 the source code alone. New decisions go at the top, dated. Each entry should answer
 **why** the choice was made and **what was rejected**.
 
-> **Naming note:** the framework is **EasyAgent**. The personal-site agent profile is **Strauss**, bundled under `profiles/strauss/` as the showcase example. Older entries below predate this rename and refer to the framework as "Strauss" — read them in that historical context.
+> **Naming note:** the framework is **EasyAgent**. The personal-site agent profile is now **Personal Agent**, bundled under `profiles/personal-agent/` as the showcase example. Older entries below may refer to the former **Strauss** name — read them in that historical context.
 
 ---
+
+## 2026-06-01 — Code review contracts made explicit
+
+### Decision: Treat profile/API/tool contracts as runtime boundaries
+**Choice:** RAG health now has a stable browser/API shape with `status`,
+`error_type`, and `message`, while preserving the older dashboard fields such as
+`rag_enabled`, `indexed_files`, `stale`, and `stale_reason`. `/api/rag/index`
+is the canonical RAG health read. `/api/status` still exists for the local
+technical dashboard, but its payload assembly moved to `backend/status.py` and
+README now points external clients at the focused endpoints instead.
+
+`load_profile()` now raises `FileNotFoundError` for any missing
+`profile.json`, including the configured default profile. The old silent
+generic-agent fallback hid deployment mistakes, including stale local
+`DEFAULT_PROFILE` values. Runtime dictionaries that cross module boundaries are
+now named in `backend/types.py` (`ModelConfig`, `BrandMetadata`, `UsagePayload`,
+provider messages, and session state) without introducing a broader validation
+framework.
+
+Unexpected tool exceptions are still logged with stack traces, but production
+tool results now return a non-leaky `"tool failed unexpectedly"` envelope. Set
+`EASYAGENT_TOOL_DEBUG_ERRORS=1` to re-raise those unexpected exceptions while
+developing a profile or native tool.
+
+**Why:** The post-dashboard review showed that the biggest remaining risk was
+not more RAG algorithm work; it was ambiguous API/error shape and soft
+configuration boundaries. Making these contracts explicit keeps EasyAgent
+portable for business profiles while preserving the known-good `search_kb`
+baseline and additive `semantic_search_kb` rollout.
+
+**Rejected:** Keeping the default-profile fallback for convenience; embedding
+RAG health back into `/api/profile`; making `/api/status` a public integration
+contract; or adding mypy/pyright as a new gate before the runtime contracts are
+settled.
+
+## 2026-06-01 — Native tool registration collapsed into `ToolDef`
+
+### Decision: Register native tools once with schema, handler, and source metadata together
+**Choice:** Native tools now declare a `ToolDef` that owns the
+Anthropic-shaped schema, dispatch handler, and browser-safe source metadata
+builder. Domain modules own their tool definitions (`backend/tools/kb.py`,
+`web_fetch.py`, `sales.py`, `calculator.py`, `web_search_tool.py`, and
+`backend/rag/tools.py`), while `backend/tools/registry.py` assembles the single
+tool list used by `run_tool()`, `SCHEMAS`, and source metadata lookup. The
+dispatch module is back to an envelope: allowlist checks, error normalization,
+context construction, and JSON result wrapping.
+
+**Why:** The review correctly identified that adding a business-specific tool
+still required coordinated edits across schemas, dispatch, metadata, and profile
+configuration. Co-locating each tool's contract and metadata keeps the framework
+cheaper to tailor for customer-service, sales, research, and bespoke profiles,
+and it prevents `source_metadata.py` from becoming another branch-heavy
+monolith.
+
+**Profile wording:** Shared resume/project tool schemas are now generic. The
+Personal Agent profile supplies Bryan-specific descriptions through
+`tool_descriptions` in `profiles/personal-agent/profile.json`, and provider
+adapters pass those overrides when constructing model-facing schemas.
+
+**Rejected:** Keeping separate `GENERIC_TOOL_HANDLERS` and
+`PROFILE_TOOL_HANDLERS` maps. A single registry is clearer; profile gating
+already happens through `profile.tools`, so a one-tool "profile" bucket added
+labels without deleting conditionals.
+
+### Decision: Make alternate profile roots explicit
+**Choice:** `load_profile()` accepts `profile_root=...`, and the RAG CLI passes
+that through directly instead of temporarily mutating `backend.profiles.PROFILE_ROOT`.
+
+**Why:** CLI tests and alternate deployments should not rely on module-global
+mutation. Passing the root as data is simpler and avoids cross-test or future
+async leakage.
+
+## 2026-06-01 — Native tools split into a package
+
+### Decision: Keep `backend.tools` as the public API while moving tool internals into focused modules
+**Choice:** `backend/tools.py` became the `backend/tools/` package. The stable
+imports still work (`from backend.tools import SCHEMAS, ToolResult, run_tool`),
+but schemas, result metadata, SSRF-guarded web fetching, calculator logic, sales
+tools, and dispatch now live in separate modules. `ToolContext.profile` is typed
+as `AgentProfile | None`, and profile system-prompt manifest generation now uses
+the shared safe KB walker instead of raw markdown `rglob`.
+
+**Why:** Eval and future business-profile tools need somewhere clean to land.
+The handler registry fixed control-flow growth, but a 1k+ line module still made
+unrelated changes collide. A package split keeps the provider/test import surface
+stable while giving future work clear ownership boundaries.
+
+**Rejected:** Leaving `backend/tools.py` as a temporary facade plus a second
+internal package. That would preserve the filename but keep two tool entry
+points to reason about. A normal Python package with re-exports is simpler and
+keeps call sites unchanged.
+
+## 2026-06-01 — RAG integration boundaries tightened after review
+
+### Decision: Share KB walking, cache retrievers, and register tool handlers before more tool growth
+**Choice:** KB enumeration now flows through `backend.kb_loader.iter_kb_files()`
+and `iter_markdown_files()`, so runtime search and RAG manifest scans both reuse
+the `_safe_resolve()` trust boundary and skip symlink escapes consistently. The
+indexer also resolves changed manifest paths through `_safe_resolve()` before
+reading, scans current markdown files once per build, and clears cached
+retrievers before rewriting index files.
+
+`get_retriever_for_profile()` now memoizes loaded retrievers by profile id,
+index directory, embedding identity, and the manifest/BM25/vector file
+fingerprint. Cache invalidation closes old vector connections so multi-hop
+semantic searches do not repeatedly unpickle BM25 or reopen sqlite-vec, while
+index rebuilds do not write over a cached open connection. `run_tool()` now uses
+a small handler registry with separate profile-scoped handlers instead of adding
+another branch to the dispatcher, and search source metadata shares one helper
+for `search_kb` and `semantic_search_kb`. `SemanticSearchError` now subclasses
+the shared `ToolExecutionError`, so tool errors return the clean envelope rather
+than a runtime-exception prefix.
+
+**Why:** The RAG core was modular, but review showed the framework boundary was
+starting to absorb too much future complexity. These changes preserve the public
+tool contract while making the next business-profile tool cheaper to add and
+making index-time filesystem behavior match runtime KB safety. Retriever caching
+also removes avoidable per-hop reload cost on the VPS path.
+
+**Rejected:** A full physical split of `backend/tools.py` in this pass. The file
+still needs decomposition, but the active branch already contains broad profile,
+frontend, and RAG changes. A registry seam is the smaller safe move now; moving
+schemas, metadata, web fetch, and sales handlers into separate modules should be
+the next cleanup once this branch is stable.
+
+## 2026-06-01 — Personal profile renamed from Strauss to personal-agent
+
+### Decision: Use a descriptive profile id for the bundled personal agent
+**Choice:** The bundled personal-site profile moved from `profiles/strauss/`
+to `profiles/personal-agent/`, with profile id `personal-agent` and label
+`Personal Agent`. The default profile, frontend fallback presentation, README
+commands, `.env.example`, AGENTS guidance, and tests now use the descriptive
+id. The persona and KB behavior remain the same: it is still Bryan's
+candidate-advocate profile with the same tools, KB root, brand color, and
+retrieval behavior.
+
+**Why:** `Strauss` was memorable but opaque to future agents and collaborators.
+`personal-agent` makes the profile's job obvious in config, CLI commands,
+RAG index paths, and test names while preserving EasyAgent's profile-driven
+architecture. Renaming the profile package is cleaner than special-casing a
+display alias because the profile id is the stable operational handle for API
+requests, defaults, CLI indexing, and frontend selection.
+
+**Rejected:** Keeping the old id and only changing the display label. That
+would leave commands like `backend.rag.cli build strauss` and defaults like
+`DEFAULT_PROFILE=strauss`, which is exactly the ambiguity this rename is meant
+to remove. Also rejected: changing the engine name or personal KB layout; those
+are separate boundaries.
+
+## 2026-06-01 — Semantic RAG ships as an additive profile tool
+
+### Decision: Build per-profile hybrid indexes explicitly, then expose semantic search only by allowlist
+**Choice:** `backend/rag/embeddings.py`, `indexer.py`, `retriever.py`,
+`tools.py`, and `cli.py` now form the first usable semantic-search slice.
+Embeddings use a small `EmbeddingProvider` protocol with Voyage, local
+sentence-transformers, and deterministic fake providers; optional packages are
+imported only when selected. The indexer writes `manifest.json`, `bm25.pkl`,
+and `index.sqlite` under the profile's `.index/` directory by default, deletes
+removed or modified paths from both sparse and vector indexes, embeds changed
+chunks in batches, reports stale reasons, and is driven by
+`python -m backend.rag.cli build ...`. The vector schema is created even for an
+empty KB so a successful build does not leave the index permanently stale. The
+retriever fuses BM25 and sqlite-vec results with plain Reciprocal Rank Fusion
+and returns typed result metadata.
+
+**Why:** This keeps EasyAgent's profile-driven architecture intact while making
+RAG usable end to end. Each profile owns its KB, prompt, tool allowlist, and
+index, so semantic retrieval can be enabled for Personal Agent, Customer
+Service, and Frampton without changing Research Analyst or Sales Concierge
+behavior. The
+fake embedding backend keeps tests deterministic and model-free, while Voyage
+and local providers remain opt-in runtime choices. README and `.env.example`
+now document the live and fake embedding paths, and the test suite covers the
+chat endpoint, agent loop, tool dispatcher, indexer, retriever, embeddings, and
+storage primitives without requiring a live embedding API.
+
+**Rejected:** Replacing or altering `search_kb`; rebuilding indexes in the chat
+request path; exposing `semantic_search_kb` globally outside profile
+allowlists; adding a reranker before it can be fully mocked and measured; and
+importing `voyageai`, `sentence-transformers`, or sqlite-vec from core startup
+paths. Browser-facing source metadata remains category-level and does not leak
+raw KB paths.
+
+## 2026-06-01 — RAG foundation stays optional and typed
+
+### Decision: Keep RAG storage opt-in while making `Chunk` the canonical contract
+**Choice:** `sqlite-vec` moved from core dependencies into the optional `rag`
+extra, and `backend/rag/vector_index.py` now imports it only when a
+`VectorIndex` opens a connection. `BM25Index` and `VectorIndex` now accept and
+return `Chunk` objects directly instead of converting through dict-shaped
+documents, and `Chunk.to_doc()` / `chunks_to_docs()` were removed. BM25 also
+has `delete_by_path()` so future incremental re-indexing can delete changed
+files from sparse and vector indexes symmetrically. `plan.md` and the RAG
+package docstring were also corrected to describe this as a validated
+foundation pass, with `semantic_search_kb` still future additive work.
+
+**Why:** EasyAgent's normal profile/runtime imports should not require an
+unused native sqlite extension while RAG is still opt-in. Keeping `Chunk` as the
+one storage and retrieval type prevents heading path list/tuple drift before
+the retriever, eval harness, and future `semantic_search_kb` tool are added.
+Symmetric delete support keeps the planned manifest-driven indexer from
+silently leaving stale sparse results behind when a file changes.
+
+**Rejected:** Keeping `sqlite-vec` as a runtime dependency for every install,
+keeping BM25/vector APIs on `dict[str, Any]`, or wiring semantic search into
+`backend/tools.py` during this foundation pass. `search_kb` remains the
+known-good baseline, and `semantic_search_kb` remains a future additive tool.
+
+### Decision: Corrupt manifests fail loudly instead of looking missing
+**Choice:** `Manifest.load()` still returns `None` when the manifest file is
+absent, but it now raises `ManifestError` for invalid JSON, unsupported
+versions, non-object payloads, and malformed file entries. Focused tests cover
+manifest save/load, invalid manifests, BM25 save/load/delete behavior, and
+sqlite-backed vector add/search/upsert/delete behavior when the optional extra
+is installed.
+
+**Why:** A missing manifest means an index has not been built; a corrupt
+manifest means the index state cannot be trusted. Treating both states the same
+would make future rebuild logic hide bad state and could duplicate or orphan
+chunks. The tests lock down the foundation behavior before profile-specific RAG
+integration begins.
+
+**Rejected:** Swallowing JSON decode errors and rebuilding as if nothing had
+ever been indexed. Also rejected: expanding this pass into tool integration,
+profile allowlist changes, or replacing the current keyword search path.
+
+## 2026-06-01 — README names June roadmap and future platform ideas
+
+### Decision: Separate near-term foundation work from forward-looking platform features
+**Choice:** `README.md` now has a compact capabilities list, a June 2026
+roadmap, an implementation-direction section, and a forward-looking ideas
+backlog. The June roadmap focuses on RAG cleanup, tool architecture boundaries,
+additive `semantic_search_kb`, profile evals, CI, and onboarding docs. Bigger
+business-platform ideas like MCP runtime execution, durable handoff,
+multi-tenancy, channel adapters, observability dashboards, live Stripe/CRM
+writes, voice, and fine-tuning are listed separately as future ideas.
+
+**Why:** EasyAgent is already useful as a portable single-widget business-agent
+framework, but the next work should strengthen the foundation before promising a
+multi-tenant platform. Putting the immediate June work and the aspirational
+backlog in different README sections makes the project easier to understand for
+future agents, collaborators, and portfolio readers.
+
+**Rejected:** Mixing every idea into the active roadmap. That would make the
+near-term RAG, tooling, and eval work look less focused and could imply that
+multi-channel or live-write integrations are already in scope for the current
+runtime.
+
+## 2026-05-27 — RAG plan favors simple readable code
+
+### Decision: Make simplicity an explicit implementation constraint
+**Choice:** `plan.md` now includes an "Implementation style" section for the
+RAG work. It asks future implementation to stay small, typed, deterministic,
+profile-scoped, and testable, with `semantic_search_kb` added beside
+`search_kb` instead of replacing it. The vector index and retriever bullets now
+also call out thin wrappers and plain readable RRF code.
+
+**Why:** RAG projects can drift into generic retrieval platforms before the
+first useful evaluation exists. EasyAgent's value is portability through a clear
+profile + engine + tools shape, so the RAG layer should be understandable to a
+future agent reading the source without needing to reconstruct a large hidden
+framework.
+
+**Rejected:** Adding broad registries, deep inheritance, or speculative
+abstractions up front. Those can be introduced later only if repeated real
+profiles prove they remove more complexity than they add.
+
+## 2026-05-27 — RAG plan requires paired baseline evaluation
+
+### Decision: Measure RAG against the current keyword search path before judging success
+**Choice:** `plan.md` now makes the RAG eval harness run paired `keyword`,
+`hybrid`, and optional `hybrid_rerank` variants, with retrieval-only and full
+agent-loop comparisons. The `keyword` variant is the current `search_kb`
+substring/regex behavior and acts as the "without RAG" control; `hybrid` is the
+dense-vector + BM25 + RRF candidate; `hybrid_rerank` is measured separately so
+reranking has to justify its latency and cost.
+
+**Why:** A semantic index can look impressive in isolation while failing to
+outperform the existing KB tool on real profile questions. Paired runs keep the
+model, profile, prompt, session reset, and graders fixed so the score delta is
+attributable to retrieval instead of random conversation drift. The report is
+also designed to show regressions case by case, not only a pretty average.
+
+**Rejected:** Treating "pytest passes" or a few manual semantic-search examples
+as proof that RAG helped. Also rejected: comparing only against a closed-book
+model. Closed-book is useful as a diagnostic, but the real product baseline is
+the current keyword KB search path users already have.
 
 ## 2026-05-06 — Commit the Frampton Dark Souls KB to the repo
 

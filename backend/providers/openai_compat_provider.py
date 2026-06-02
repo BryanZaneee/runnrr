@@ -14,6 +14,7 @@ from openai import AsyncOpenAI
 from backend.profiles import AgentProfile
 from backend.providers.base import Event
 from backend.tools import ToolResult, schemas_for_tools
+from backend.types import ProviderMessage, UsagePayload
 
 
 class OpenAICompatProvider:
@@ -41,10 +42,12 @@ class OpenAICompatProvider:
             base_url=base_url,
         )
 
-    def format_user(self, text: str) -> dict:
+    def format_user(self, text: str) -> ProviderMessage:
         return {"role": "user", "content": text}
 
-    def append_tool_results(self, messages: list, results: list[ToolResult]) -> None:
+    def append_tool_results(
+        self, messages: list[ProviderMessage], results: list[ToolResult]
+    ) -> None:
         for r in results:
             msg = {
                 "role": "tool",
@@ -65,7 +68,10 @@ class OpenAICompatProvider:
                     "parameters": s["input_schema"],
                 },
             }
-            for s in schemas_for_tools(profile.tools)
+            for s in schemas_for_tools(
+                profile.tools,
+                description_overrides=profile.tool_descriptions,
+            )
         ]
 
     def system_for_provider(self, profile: AgentProfile) -> dict:
@@ -75,7 +81,7 @@ class OpenAICompatProvider:
         self,
         *,
         model: str,
-        messages: list,
+        messages: list[ProviderMessage],
         system: Any,
         tools: list,
         max_tokens: int,
@@ -101,7 +107,7 @@ class OpenAICompatProvider:
         tool_calls: dict[int, dict[str, Any]] = {}
         announced_tool_names: set[str] = set()
         stop_reason = "end_turn"
-        usage: dict[str, int] | None = None
+        usage: UsagePayload | None = None
 
         async for chunk in stream:
             usage_obj = getattr(chunk, "usage", None)
@@ -203,7 +209,7 @@ def _parse_arguments(raw: str) -> dict:
     return parsed if isinstance(parsed, dict) else {"value": parsed}
 
 
-def _norm_usage(u: Any) -> dict:
+def _norm_usage(u: Any) -> UsagePayload:
     input_tokens = getattr(u, "prompt_tokens", None)
     if input_tokens is None:
         input_tokens = getattr(u, "input_tokens", 0) or 0

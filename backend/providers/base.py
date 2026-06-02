@@ -9,6 +9,7 @@ from typing import Any, AsyncIterator, Literal, Protocol, TypedDict
 
 from backend.profiles import AgentProfile
 from backend.tools import ToolResult
+from backend.types import ProviderMessage, UsagePayload
 
 
 class Event(TypedDict, total=False):
@@ -26,7 +27,7 @@ class Event(TypedDict, total=False):
     name: str
     arguments: dict
     stop_reason: Literal["end_turn", "tool_use"]
-    usage: dict  # {input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens}
+    usage: UsagePayload
 
 
 class LLMProvider(Protocol):
@@ -34,7 +35,7 @@ class LLMProvider(Protocol):
         self,
         *,
         model: str,
-        messages: list,
+        messages: list[ProviderMessage],
         system: Any,
         tools: list,
         max_tokens: int,
@@ -44,9 +45,11 @@ class LLMProvider(Protocol):
         produces a valid message log for the next turn)."""
         ...
 
-    def format_user(self, text: str) -> dict: ...
+    def format_user(self, text: str) -> ProviderMessage: ...
 
-    def append_tool_results(self, messages: list, results: list[ToolResult]) -> None: ...
+    def append_tool_results(
+        self, messages: list[ProviderMessage], results: list[ToolResult]
+    ) -> None: ...
 
     def tools_for_provider(self, profile: AgentProfile) -> list[dict]: ...
 

@@ -11,11 +11,12 @@ from backend.config import MAX_TOKENS, MAX_TOOL_HOPS
 from backend.profiles import AgentProfile, load_profile
 from backend.providers.base import LLMProvider
 from backend.tools import run_tool
+from backend.types import SessionDict
 
 
 async def run_conversation_stream(
     user_message: str,
-    session: dict,
+    session: SessionDict,
     provider: LLMProvider,
     model: str,
     profile: AgentProfile | None = None,
@@ -67,7 +68,7 @@ async def run_conversation_stream(
 
         if pending_usage is not None:
             # Categorize by what the hop produced, not by whether thinking happened —
-            # otherwise thinking-enabled models (Strauss runs Sonnet 4.5 with extended
+            # otherwise thinking-enabled models (Personal Agent can run Sonnet with extended
             # thinking on every hop) would always land in "reasoning" and the Tools /
             # Response buckets could never increment. Reasoning tokens travel
             # separately on `reasoning_tokens` so the frontend can fan them out.
@@ -91,6 +92,7 @@ async def run_conversation_stream(
                 tc["tool_use_id"],
                 root=profile.kb_root,
                 data_root=profile.data_root,
+                profile=profile,
                 allowed_tools=profile.tools,
             )
             for tc in tool_calls_pending

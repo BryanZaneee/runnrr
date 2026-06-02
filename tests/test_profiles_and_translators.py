@@ -19,14 +19,16 @@ async def collect(gen):
     return [ev async for ev in gen]
 
 
-def test_strauss_profile_loads_persona_and_kb_root():
-    profile = load_profile("strauss")
-    assert profile.id == "strauss"
+def test_personal_agent_profile_loads_persona_and_kb_root():
+    profile = load_profile("personal-agent")
+    assert profile.id == "personal-agent"
     assert profile.kb_root.name == "kb"
     assert "advocate-in-residence" in profile.system_prompt
+    assert profile.label == "Personal Agent"
     assert "get_resume_summary" in profile.tools
+    assert "Bryan's resume" in profile.tool_descriptions["get_resume_summary"]
     assert "Tell me about Shuttrr." in profile.suggestions
-    # Strauss does not opt into manifest injection, so its system prompt is not augmented.
+    # Personal Agent does not opt into manifest injection, so its system prompt is not augmented.
     assert "<knowledge_base_index>" not in profile.system_prompt
 
 
@@ -39,7 +41,12 @@ def test_frampton_profile_loads_ds1_persona_and_kb_tools():
         ("kb/frampton", "dark_souls_1_fextra_kb_by_category")
     )
     assert "local Dark Souls 1 Fextralife knowledge base" in profile.system_prompt
-    assert profile.tools == ("list_kb", "read_file", "search_kb")
+    assert profile.tools == (
+        "list_kb",
+        "read_file",
+        "search_kb",
+        "semantic_search_kb",
+    )
     assert "Artorias" in profile.suggestions[1]
     assert profile.brand["accent"] == "#B3261E"
     assert profile.brand["accent_dark"] == "#4A0F0B"
@@ -74,7 +81,26 @@ def test_build_kb_manifest_on_missing_root_returns_empty(tmp_path):
     assert build_kb_manifest(tmp_path / "does-not-exist") == ""
 
 
-def test_inject_kb_manifest_opt_in(tmp_path, monkeypatch):
+def test_build_kb_manifest_skips_symlink_escape(tmp_path):
+    kb = tmp_path / "kb"
+    notes = kb / "notes"
+    notes.mkdir(parents=True)
+    (notes / "inside.md").write_text("inside", encoding="utf-8")
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside", encoding="utf-8")
+    link = notes / "leak.md"
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlinks unavailable: {exc}")
+
+    manifest = build_kb_manifest(kb)
+
+    assert "notes/: inside" in manifest
+    assert "leak" not in manifest
+
+
+def test_inject_kb_manifest_opt_in(tmp_path):
     """A profile only gets the manifest when it opts in via inject_kb_manifest."""
     profile_dir = tmp_path / "tinyprof"
     profile_dir.mkdir()
@@ -98,10 +124,7 @@ def test_inject_kb_manifest_opt_in(tmp_path, monkeypatch):
         )
     )
 
-    from backend import profiles as profiles_module
-
-    monkeypatch.setattr(profiles_module, "PROFILE_ROOT", tmp_path)
-    profile = load_profile("tinyprof")
+    profile = load_profile("tinyprof", profile_root=tmp_path)
     assert profile.system_prompt.startswith("<knowledge_base_index>")
     assert "Notes/: alpha" in profile.system_prompt
     assert "you are a tiny agent" in profile.system_prompt
@@ -110,6 +133,79 @@ def test_inject_kb_manifest_opt_in(tmp_path, monkeypatch):
 def test_unknown_explicit_profile_raises():
     with pytest.raises(FileNotFoundError):
         load_profile("definitely-not-a-profile")
+
+
+def test_missing_default_profile_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        load_profile(profile_root=tmp_path)
+
+
+def test_profile_without_tools_key_gets_generic_defaults(tmp_path):
+    """A minimal profile.json must NOT silently inherit personal-site tools."""
+    from backend.profiles import DEFAULT_PROFILE_TOOLS
+
+    profile_dir = tmp_path / "barebones"
+    profile_dir.mkdir()
+    (profile_dir / "system.md").write_text("you are a barebones agent")
+    (profile_dir / "profile.json").write_text(
+        json.dumps(
+            {
+                "id": "barebones",
+                "label": "Barebones",
+                "description": "no tools key",
+                "kb_root": str(tmp_path),
+                "system_prompt_path": str(profile_dir / "system.md"),
+            }
+        )
+    )
+
+    profile = load_profile("barebones", profile_root=tmp_path)
+    assert profile.tools == ("list_kb", "read_file", "search_kb", "web_search")
+    assert profile.tools == DEFAULT_PROFILE_TOOLS
+    assert "get_resume_summary" not in profile.tools
+    assert "get_project_context" not in profile.tools
+
+
+def test_model_registry_entries_expose_typed_public_fields():
+    from backend.config import MODEL_REGISTRY, available_models
+
+    cfg = MODEL_REGISTRY["claude-sonnet-4-5"]
+    assert cfg["provider"] == "anthropic"
+    assert cfg["model"] == "claude-sonnet-4-5"
+    assert cfg["label"] == "Claude Sonnet 4.5"
+    assert cfg["vendor"] == "Anthropic"
+
+    listed = available_models()
+    assert all({"id", "label", "vendor", "provider"} <= set(model) for model in listed)
+
+
+def test_profile_parses_source_path_labels(tmp_path):
+    profile_dir = tmp_path / "labeled"
+    profile_dir.mkdir()
+    (profile_dir / "system.md").write_text("agent")
+    (profile_dir / "profile.json").write_text(
+        json.dumps(
+            {
+                "id": "labeled",
+                "label": "Labeled",
+                "description": "path labels",
+                "kb_root": str(tmp_path),
+                "system_prompt_path": str(profile_dir / "system.md"),
+                "source_path_labels": [
+                    ["docs/menu.md", "Menu"],
+                    ["policies/", "Store policy"],
+                    "malformed-entry-ignored",
+                ],
+            }
+        )
+    )
+
+    profile = load_profile("labeled", profile_root=tmp_path)
+    # Case-sensitive, ordered, malformed entries dropped.
+    assert profile.source_path_labels == (
+        ("docs/menu.md", "Menu"),
+        ("policies/", "Store policy"),
+    )
 
 
 def test_tool_allowlist_blocks_disabled_tool(kb_root):
@@ -126,13 +222,13 @@ def test_tool_allowlist_blocks_disabled_tool(kb_root):
 
 def test_openai_compat_provider_uses_translated_tools_without_client_key():
     provider = OpenAICompatProvider(api_key_env="NO_SUCH_KEY", client=DummyClient())
-    tools = provider.tools_for_provider(load_profile("strauss"))
+    tools = provider.tools_for_provider(load_profile("personal-agent"))
     assert tools[0]["type"] == "function"
 
 
 def test_gemini_provider_builds_function_declarations_without_client_key():
     provider = GeminiProvider(client=DummyClient())
-    tools = provider.tools_for_provider(load_profile("strauss"))
+    tools = provider.tools_for_provider(load_profile("personal-agent"))
     declarations = tools[0].function_declarations
     assert declarations[0].name == SCHEMAS[0]["name"]
     assert declarations[0].parameters_json_schema == SCHEMAS[0]["input_schema"]
@@ -219,7 +315,7 @@ async def test_openai_provider_accumulates_streaming_tool_call():
     ]
     client = FakeOpenAIClient(chunks)
     provider = OpenAICompatProvider(api_key_env="NO_SUCH_KEY", client=client)
-    profile = load_profile("strauss")
+    profile = load_profile("personal-agent")
     messages = [provider.format_user("resume?")]
 
     events = await collect(

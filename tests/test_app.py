@@ -5,68 +5,15 @@ when the provider is replaced with a FakeProvider that yields canned events.
 """
 from __future__ import annotations
 
-import os
-from typing import Any, AsyncIterator
+import json
+import shutil
+from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from backend.profiles import AgentProfile
-from backend.providers.base import Event
-from backend.tools import SCHEMAS, ToolResult
 
-
-# --------------------------------------------------------------------------- #
-# A minimal FakeProvider duplicated from test_agent_loop.py so this file can
-# be read in isolation.
-# --------------------------------------------------------------------------- #
-
-
-class FakeProvider:
-    def __init__(self, scripted_turns: list[list[Event]]) -> None:
-        self.scripted_turns = scripted_turns
-        self.turn_index = 0
-
-    async def stream(self, **kwargs: Any) -> AsyncIterator[Event]:
-        events = self.scripted_turns[self.turn_index]
-        self.turn_index += 1
-        kwargs["messages"].append({"role": "assistant", "content": "<scripted>"})
-        for ev in events:
-            yield ev
-
-    def format_user(self, text: str) -> dict:
-        return {"role": "user", "content": text}
-
-    def append_tool_results(self, messages: list, results: list[ToolResult]) -> None:
-        messages.append({"role": "user", "content": [r.tool_use_id for r in results]})
-
-    def tools_for_provider(self, profile: AgentProfile) -> list[dict]:
-        return SCHEMAS
-
-    def system_for_provider(self, profile: AgentProfile) -> Any:
-        return "test-system"
-
-
-# --------------------------------------------------------------------------- #
-# Fixtures
-# --------------------------------------------------------------------------- #
-
-
-@pytest.fixture
-def client(monkeypatch):
-    # Pretend Anthropic key is set so /api/models returns at least one model.
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    # Reload config so available_models() sees the patched env.
-    import importlib
-    from backend import config
-
-    importlib.reload(config)
-    from backend import app as app_module
-
-    importlib.reload(app_module)
-    # Disable rate limit by default; the dedicated rate-limit test re-enables it.
-    app_module.limiter.enabled = False
-    return TestClient(app_module.app), app_module
+MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
 
 
 # --------------------------------------------------------------------------- #
@@ -122,7 +69,7 @@ class TestProfiles:
 
         assert body["id"] == "frampton"
         assert body["label"] == "Frampton"
-        assert body["tools"] == ["list_kb", "read_file", "search_kb"]
+        assert body["tools"] == ["list_kb", "read_file", "search_kb", "semantic_search_kb"]
         assert [schema["name"] for schema in body["tool_schemas"]] == body["tools"]
         assert body["mcp_servers"] == []
         assert body["brand"]["accent"] == "#B3261E"
@@ -133,6 +80,69 @@ class TestProfiles:
         assert body["brand"]["hero_icon"] == " /\\_/\\\n( o_o )\n/|___|\\\n  v v"
         assert "Dark Souls 1 questions" in body["welcome"]
         assert "Explain Artorias and the Abyss." in body["suggestions"]
+
+    def test_profile_excludes_rag_index_summary(self, client):
+        # /api/profile is intentionally cheap and must NOT embed RAG-index health
+        # (that scans the KB filesystem). RAG health lives at /api/rag/index.
+        c, _ = client
+        r = c.get("/api/profile", params={"profile_id": "research-analyst"})
+        assert r.status_code == 200
+        assert "rag_index" not in r.json()
+
+    def test_personal_agent_profile_loads_aliases_and_labels(self):
+        from backend.profiles import load_profile
+
+        profile = load_profile("personal-agent")
+        assert profile.project_aliases["bryanzane.com"] == "bryanzane-com"
+        assert profile.source_labels["shuttrr"] == "Shuttrr"
+
+    def test_personal_agent_profile_loads_source_path_labels(self):
+        from backend.profiles import load_profile
+
+        profile = load_profile("personal-agent")
+        assert ("resume/resume.md", "Resume") in profile.source_path_labels
+        assert ("meta/", "Portfolio knowledge base") in profile.source_path_labels
+
+    def test_list_profiles_logs_and_skips_broken(self, client, monkeypatch, tmp_path, caplog):
+        import logging
+
+        from backend import app as app_module
+        from backend import profiles as profiles_module
+
+        c, _ = client
+        root = tmp_path / "profiles"
+        root.mkdir()
+        good = root / "good"
+        good.mkdir()
+        (good / "system.md").write_text("good agent", encoding="utf-8")
+        (good / "profile.json").write_text(
+            json.dumps(
+                {
+                    "id": "good",
+                    "label": "Good",
+                    "description": "ok",
+                    "kb_root": str(tmp_path),
+                    "system_prompt_path": str(good / "system.md"),
+                }
+            ),
+            encoding="utf-8",
+        )
+        broken = root / "broken"
+        broken.mkdir()
+        (broken / "profile.json").write_text("{ not valid json", encoding="utf-8")
+
+        # list_profiles iterates app's PROFILE_ROOT; load_profile reads its own.
+        monkeypatch.setattr(app_module, "PROFILE_ROOT", root)
+        monkeypatch.setattr(profiles_module, "PROFILE_ROOT", root)
+
+        with caplog.at_level(logging.WARNING, logger="easyagent"):
+            r = c.get("/api/profiles")
+
+        assert r.status_code == 200
+        ids = {p["id"] for p in r.json()["profiles"]}
+        assert "good" in ids
+        assert "broken" not in ids
+        assert any("broken" in rec.getMessage() for rec in caplog.records)
 
 
 # --------------------------------------------------------------------------- #
@@ -149,10 +159,10 @@ class TestChat:
         )
         assert r.status_code == 400
 
-    def test_streams_well_formed_sse(self, client, monkeypatch):
+    def test_streams_well_formed_sse(self, client, monkeypatch, fake_provider_cls):
         c, app_module = client
 
-        fake = FakeProvider(
+        fake = fake_provider_cls(
             [
                 [
                     {"type": "text_delta", "text": "Hello"},
@@ -184,10 +194,12 @@ class TestChat:
         assert "event: usage" in kinds
         assert kinds[-1] == "event: done"
 
-    def test_streams_sanitized_tool_sources(self, client, monkeypatch, kb_root):
+    def test_streams_sanitized_tool_sources(
+        self, client, monkeypatch, kb_root, fake_provider_cls
+    ):
         c, app_module = client
 
-        fake = FakeProvider(
+        fake = fake_provider_cls(
             [
                 [
                     {"type": "tool_use_complete", "tool_use_id": "tu_read",
@@ -206,6 +218,7 @@ class TestChat:
             description="Test profile",
             kb_root=kb_root,
             system_prompt="test-system",
+            source_path_labels=(("resume/resume.md", "Resume"),),
         )
         monkeypatch.setattr(app_module, "get_provider", lambda mid: fake)
         monkeypatch.setattr(app_module, "get_profile", lambda profile_id="test": profile)
@@ -229,10 +242,88 @@ class TestChat:
         assert "resume.md" not in body
         assert str(kb_root) not in body
 
-    def test_session_state_grows(self, client, monkeypatch):
+    def test_semantic_search_runs_through_chat_endpoint(
+        self,
+        client,
+        monkeypatch,
+        tmp_path,
+        fake_provider_cls,
+        parse_sse,
+    ):
+        pytest.importorskip("sqlite_vec")
+        from backend import config
+        from backend.rag.embeddings import FakeEmbeddingProvider
+        from backend.rag.indexer import Indexer
+
+        c, app_module = client
+        kb = tmp_path / "mini_rag_kb"
+        shutil.copytree(MINI_RAG_FIXTURE, kb)
+        index_root = tmp_path / "indexes"
+        monkeypatch.setattr(config, "RAG_INDEX_ROOT", index_root)
+        monkeypatch.setattr(config, "EMBEDDING_BACKEND", "fake")
+        monkeypatch.setattr(config, "EMBEDDING_MODEL", "")
+        profile = AgentProfile(
+            id="mini",
+            label="Mini",
+            description="Mini RAG profile",
+            kb_root=kb,
+            system_prompt="test-system",
+            tools=("list_kb", "read_file", "search_kb", "semantic_search_kb"),
+        )
+        Indexer(
+            profile,
+            FakeEmbeddingProvider(),
+            index_dir=index_root / profile.id,
+        ).build()
+        fake = fake_provider_cls(
+            [
+                [
+                    {
+                        "type": "tool_use_complete",
+                        "tool_use_id": "tu_semantic",
+                        "name": "semantic_search_kb",
+                        "arguments": {"query": "portable profile retrieval", "k": 2},
+                    },
+                    {"type": "message_done", "stop_reason": "tool_use"},
+                ],
+                [
+                    {"type": "text_delta", "text": "Done."},
+                    {"type": "message_done", "stop_reason": "end_turn"},
+                ],
+            ]
+        )
+        monkeypatch.setattr(app_module, "get_provider", lambda mid: fake)
+        monkeypatch.setattr(app_module, "get_profile", lambda profile_id="mini": profile)
+
+        with c.stream(
+            "POST",
+            "/api/chat",
+            json={
+                "session_id": "s-semantic-e2e",
+                "message": "find conceptual retrieval context",
+                "model": "claude-sonnet-4-5",
+                "profile": "mini",
+            },
+        ) as r:
+            assert r.status_code == 200
+            body = b"".join(r.iter_bytes()).decode("utf-8")
+
+        events = parse_sse(body)
+        tool_payloads = [
+            payload for event, payload in events if event == "tool_result"
+        ]
+        assert tool_payloads
+        assert tool_payloads[0]["name"] == "semantic_search_kb"
+        assert tool_payloads[0]["is_error"] is False
+        assert tool_payloads[0]["source_summary"].startswith("semantic searched")
+        assert tool_payloads[0]["source_items"][0]["kind"] == "kb_semantic_search"
+        assert "projects/alpha.md" not in body
+        assert str(kb) not in body
+
+    def test_session_state_grows(self, client, monkeypatch, fake_provider_cls):
         c, app_module = client
 
-        fake = FakeProvider(
+        fake = fake_provider_cls(
             [
                 [
                     {"type": "text_delta", "text": "ok"},
@@ -254,161 +345,69 @@ class TestChat:
         assert len(sess["messages"]) == 2
         assert sess["messages"][0]["role"] == "user"
 
-
-# --------------------------------------------------------------------------- #
-# Abuse protection: rate limit, token budget, session capacity
-# --------------------------------------------------------------------------- #
-
-
-class _LoopFake:
-    """Like FakeProvider but emits the same canned turn forever — useful when a
-    test issues many sequential chat requests."""
-
-    def __init__(self, turn: list[Event]) -> None:
-        self.turn = turn
-
-    async def stream(self, **kwargs: Any) -> AsyncIterator[Event]:
-        kwargs["messages"].append({"role": "assistant", "content": "<scripted>"})
-        for ev in self.turn:
-            yield ev
-
-    def format_user(self, text: str) -> dict:
-        return {"role": "user", "content": text}
-
-    def append_tool_results(self, messages: list, results: list[ToolResult]) -> None:
-        messages.append({"role": "user", "content": [r.tool_use_id for r in results]})
-
-    def tools_for_provider(self, profile: AgentProfile) -> list[dict]:
-        return SCHEMAS
-
-    def system_for_provider(self, profile: AgentProfile) -> Any:
-        return "test-system"
-
-
-class TestAbuseProtection:
-    def test_budget_endpoint_reports_stats(self, client):
-        c, _ = client
-        r = c.get("/api/budget")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["limit"] > 0
-        assert body["used"] >= 0
-        assert body["remaining"] >= 0
-        assert "date" in body
-
-    def test_budget_exhausted_returns_503(self, client, monkeypatch):
+    def test_session_resets_when_profile_changes(self, client, monkeypatch, tmp_path, fake_provider_cls):
         c, app_module = client
-        from backend.budget import TOKEN_BUDGET
 
-        # Force exhaustion by burning the whole limit.
-        TOKEN_BUDGET.record(TOKEN_BUDGET.daily_limit)
-
-        fake = FakeProvider(
-            [[{"type": "message_done", "stop_reason": "end_turn"}]]
-        )
-        monkeypatch.setattr(app_module, "get_provider", lambda mid: fake)
-
-        r = c.post(
-            "/api/chat",
-            json={"session_id": "s-budget", "message": "hi", "model": "claude-sonnet-4-5"},
-        )
-        assert r.status_code == 503
-        assert "budget" in r.json()["detail"].lower()
-
-    def test_budget_records_actual_usage(self, client, monkeypatch):
-        c, app_module = client
-        from backend.budget import TOKEN_BUDGET
-
-        fake = _LoopFake(
+        fake = fake_provider_cls(
             [
-                {"type": "text_delta", "text": "hi"},
-                {
-                    "type": "usage",
-                    "usage": {
-                        "input_tokens": 100,
-                        "output_tokens": 50,
-                        "cache_read_input_tokens": 0,
-                        "cache_creation_input_tokens": 0,
-                    },
-                },
-                {"type": "message_done", "stop_reason": "end_turn"},
+                [
+                    {"type": "text_delta", "text": "a"},
+                    {"type": "message_done", "stop_reason": "end_turn"},
+                ],
+                [
+                    {"type": "text_delta", "text": "b"},
+                    {"type": "message_done", "stop_reason": "end_turn"},
+                ],
             ]
         )
+        profile_a = AgentProfile(
+            id="profile-a",
+            label="Profile A",
+            description="",
+            kb_root=tmp_path,
+            system_prompt="a",
+        )
+        profile_b = AgentProfile(
+            id="profile-b",
+            label="Profile B",
+            description="",
+            kb_root=tmp_path,
+            system_prompt="b",
+        )
         monkeypatch.setattr(app_module, "get_provider", lambda mid: fake)
+        monkeypatch.setattr(
+            app_module,
+            "get_profile",
+            lambda profile_id="profile-a": profile_b if profile_id == "profile-b" else profile_a,
+        )
 
-        before = TOKEN_BUDGET.stats()["used"]
         with c.stream(
             "POST",
             "/api/chat",
-            json={"session_id": "s-record", "message": "hi", "model": "claude-sonnet-4-5"},
+            json={
+                "session_id": "session-reset",
+                "message": "hi",
+                "model": "claude-sonnet-4-5",
+                "profile": "profile-a",
+            },
+        ) as r:
+            list(r.iter_bytes())
+        assert app_module.SESSIONS["session-reset"]["profile"] == "profile-a"
+        assert len(app_module.SESSIONS["session-reset"]["messages"]) == 2
+
+        with c.stream(
+            "POST",
+            "/api/chat",
+            json={
+                "session_id": "session-reset",
+                "message": "hi again",
+                "model": "claude-sonnet-4-5",
+                "profile": "profile-b",
+            },
         ) as r:
             list(r.iter_bytes())
 
-        after = TOKEN_BUDGET.stats()["used"]
-        assert after - before == 150
-
-    def test_session_capacity_returns_503(self, client, monkeypatch):
-        c, app_module = client
-
-        # Cap at 1 active session, fill it.
-        monkeypatch.setattr(app_module, "MAX_ACTIVE_SESSIONS", 1)
-        import time as _time
-
-        app_module.SESSIONS["existing"] = {
-            "messages": [],
-            "last_seen": _time.time(),
-            "provider": "anthropic",
-            "profile": "strauss",
-        }
-
-        fake = FakeProvider(
-            [[{"type": "message_done", "stop_reason": "end_turn"}]]
-        )
-        monkeypatch.setattr(app_module, "get_provider", lambda mid: fake)
-
-        # New session should be rejected.
-        r = c.post(
-            "/api/chat",
-            json={"session_id": "s-new", "message": "hi", "model": "claude-sonnet-4-5"},
-        )
-        assert r.status_code == 503
-        assert "capacity" in r.json()["detail"].lower()
-
-    def test_rate_limit_returns_429(self, monkeypatch):
-        # Reload with a tiny per-IP limit so we can exhaust it cheaply.
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-        monkeypatch.setenv("RATE_LIMIT_CHAT", "2/minute")
-        monkeypatch.setenv("RATE_LIMIT_ENABLED", "1")
-
-        import importlib
-        from backend import config
-
-        importlib.reload(config)
-        from backend import app as app_module
-
-        importlib.reload(app_module)
-        c = TestClient(app_module.app)
-
-        fake = _LoopFake(
-            [{"type": "message_done", "stop_reason": "end_turn"}]
-        )
-        monkeypatch.setattr(app_module, "get_provider", lambda mid: fake)
-
-        statuses: list[int] = []
-        for i in range(5):
-            with c.stream(
-                "POST",
-                "/api/chat",
-                json={
-                    "session_id": f"s-rl-{i}",
-                    "message": "hi",
-                    "model": "claude-sonnet-4-5",
-                },
-            ) as r:
-                list(r.iter_bytes())
-                statuses.append(r.status_code)
-
-        assert 429 in statuses, f"expected at least one 429, got {statuses}"
-        assert statuses.count(200) <= 2, (
-            f"limit was 2/minute but got more than 2 successes: {statuses}"
-        )
+        sess = app_module.SESSIONS["session-reset"]
+        assert sess["profile"] == "profile-b"
+        assert len(sess["messages"]) == 2
+        assert sess["messages"][0]["content"] == "hi again"

@@ -2,7 +2,16 @@
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 const API_BASE_KEY = "easyagent-dashboard-api-base";
-const METRICS = ["recall_at_5", "context_precision", "faithfulness", "answer_relevance"];
+const METRICS = ["recall_at_k", "context_precision", "faithfulness", "answer_relevance"];
+
+// Older runs persisted recall as `recall_at_5`; read either key.
+function metricVal(obj, metric) {
+  if (!obj) return undefined;
+  if (metric === "recall_at_k") {
+    return obj.recall_at_k != null ? obj.recall_at_k : obj.recall_at_5;
+  }
+  return obj[metric];
+}
 const VARIANTS = ["keyword", "hybrid", "hybrid_rerank"];
 const SERIES_COLORS = ["#6bc97a", "#5b9fd4", "#c97ad4", "#d4a24a", "#e07070", "#9a9890", "#8fd4c4", "#d48f5b"];
 
@@ -172,7 +181,7 @@ function drawTrend() {
 
       const points = [];
       runs.forEach((run, i) => {
-        const val = run.per_variant?.[variant]?.[metric];
+        const val = metricVal(run.per_variant?.[variant], metric);
         if (val != null && !Number.isNaN(val)) {
           points.push({ x: mapX(i, runs.length, padL, plotW), y: mapY(val, padT, plotH), val });
         }
@@ -229,7 +238,7 @@ function renderCasesTable() {
       const selected = rec.case_id === state.selectedCaseId ? " is-selected" : "";
       return `<tr class="case-row${selected}" data-case-id="${escapeHtml(rec.case_id)}">
         <td><code>${escapeHtml(rec.case_id)}</code></td>
-        <td class="${metricClass(m.recall_at_5)}">${fmtMetric(m.recall_at_5)}</td>
+        <td class="${metricClass(metricVal(m, "recall_at_k"))}">${fmtMetric(metricVal(m, "recall_at_k"))}</td>
         <td class="${metricClass(m.context_precision)}">${fmtMetric(m.context_precision)}</td>
         <td class="${metricClass(m.faithfulness)}">${fmtMetric(m.faithfulness)}</td>
         <td class="${metricClass(m.answer_relevance)}">${fmtMetric(m.answer_relevance)}</td>

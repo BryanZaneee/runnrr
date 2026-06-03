@@ -14,8 +14,7 @@ from backend.evals.graders import (
 from backend.evals.records import build_record, dedupe_paths, zero_tokens
 from backend.kb_loader import search_kb
 from backend.profiles import AgentProfile
-from backend.rag.reranker import RERANK_CANDIDATES
-from backend.rag.retriever import run_hybrid_query
+from backend.rag.retriever import hybrid_candidate_pool, run_hybrid_query
 
 
 class EvalCaseSkipped(Exception):
@@ -52,7 +51,7 @@ def retrieve(
 
     if variant in ("hybrid", "hybrid_rerank"):
         do_rerank = variant == "hybrid_rerank"
-        pool = max(k, RERANK_CANDIDATES) if do_rerank else max(k, k * 3)
+        pool = hybrid_candidate_pool(k, rerank=do_rerank)
         reranker = None
         if do_rerank:
             from backend.rag.reranker import LLMReranker
@@ -123,7 +122,7 @@ def retrieval_record(
         ).score
         rr = reciprocal_rank(paths, list(case.expected_chunk_paths))
         metrics = {
-            "recall_at_5": recall,
+            "recall_at_k": recall,
             "context_precision": precision,
             "reciprocal_rank": rr,
             "faithfulness": None,
@@ -136,7 +135,7 @@ def retrieval_record(
         latency_ms = (time.perf_counter() - t0) * 1000.0
         paths, chunk_ids, retrieved = [], [], []
         metrics = {
-            "recall_at_5": None,
+            "recall_at_k": None,
             "context_precision": None,
             "reciprocal_rank": None,
             "faithfulness": None,

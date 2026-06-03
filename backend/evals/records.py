@@ -25,6 +25,14 @@ class RunResult:
     records: list[dict]
 
 
+def recall_metric(metrics: dict[str, Any]) -> float | None:
+    """Read the recall metric, tolerating older runs keyed as ``recall_at_5``."""
+    value = metrics.get("recall_at_k")
+    if value is None:
+        value = metrics.get("recall_at_5")
+    return value
+
+
 def dedupe_paths(paths: list[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
@@ -92,7 +100,7 @@ def build_record(
     k: int,
     skip_reason: str | None,
 ) -> dict:
-    recall = metrics.get("recall_at_5")
+    recall = recall_metric(metrics)
     return {
         "schema": 1,
         "run_id": run_id,
@@ -203,7 +211,7 @@ def build_summary(
 
         latency_vals = [float(r["latency_ms"]) for r in ok_records]
         per_variant[variant] = {
-            "recall_at_5": _avg_optional(metric_values("recall_at_5")),
+            "recall_at_k": _avg_optional(metric_values("recall_at_k")),
             "context_precision": _avg_optional(metric_values("context_precision")),
             "mrr": _avg_optional(metric_values("reciprocal_rank")),
             "faithfulness": _avg_optional(metric_values("faithfulness")),

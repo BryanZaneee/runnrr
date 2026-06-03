@@ -93,10 +93,10 @@ def test_run_retrieval_only_writes_artifacts_and_hybrid_recall(mini_rag_env) -> 
     hybrid_records = [r for r in result.records if r["variant"] == "hybrid"]
     assert hybrid_records
     assert hybrid_records[0]["status"] == "ok"
-    assert hybrid_records[0]["metrics"]["recall_at_5"] > 0
+    assert hybrid_records[0]["metrics"]["recall_at_k"] > 0
 
     summary_hybrid = result.summary["per_variant"]["hybrid"]
-    assert summary_hybrid["recall_at_5"] is not None
+    assert summary_hybrid["recall_at_k"] is not None
     assert summary_hybrid["n_ok"] >= 1
 
 

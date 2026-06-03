@@ -124,7 +124,7 @@ def end_to_end_record(
     grader_reasoning: dict[str, str] = {}
     faith = grade_faithfulness(answer, context, grade_fn=grade_fn)
     metrics: dict[str, float | None] = {
-        "recall_at_5": recall,
+        "recall_at_k": recall,
         "context_precision": None,
         "reciprocal_rank": None,
         "faithfulness": faith.score,

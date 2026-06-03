@@ -198,6 +198,25 @@ def get_retriever_for_profile(
     return retriever
 
 
+def hybrid_candidate_pool(k: int, *, rerank: bool) -> int:
+    """Canonical candidate-pool size for hybrid retrieval.
+
+    Shared by the ``semantic_search_kb`` tool and the eval runner so retrieval
+    quality matches between production and metrics. With rerank enabled the pool
+    is widened to ``RERANK_CANDIDATES`` so the reranker has enough to reorder;
+    otherwise it tracks ``Retriever.search``'s ``k * 4`` candidate default.
+
+    ``RERANK_CANDIDATES`` is imported lazily because backend.rag.reranker imports
+    RetrievalResult from this module — a module-level import would close a cycle.
+    """
+    k = max(1, int(k))
+    if rerank:
+        from backend.rag.reranker import RERANK_CANDIDATES
+
+        return max(k, RERANK_CANDIDATES)
+    return max(k, k * 4)
+
+
 def run_hybrid_query(
     profile: AgentProfile,
     query: str,
@@ -211,9 +230,9 @@ def run_hybrid_query(
     """Canonical hybrid retrieval (+ optional rerank) shared by the tool and evals.
 
     Returns the full candidate pool (length up to ``pool``); callers truncate to
-    their own ``k``. ``reranker`` is injectable so the eval runner can pass a
-    configured ``LLMReranker``; the tool uses the default. Each caller keeps its
-    own ``pool`` policy because they differ.
+    their own ``k``. Callers size ``pool`` via ``hybrid_candidate_pool`` rather
+    than ad-hoc rules. ``reranker`` is injectable so the eval runner can pass a
+    configured ``LLMReranker``; the tool uses the default.
 
     ``LLMReranker`` is imported lazily because backend.rag.reranker imports
     RetrievalResult from this module — a module-level import would close a cycle.

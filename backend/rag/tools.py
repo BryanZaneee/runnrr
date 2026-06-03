@@ -41,11 +41,10 @@ def semantic_search_kb(
     # Imported lazily so backend.tools.registry can build this tool's schema
     # without pulling the RAG retrieval graph (embeddings/reranker/retriever)
     # at import time — only profiles that actually call the tool load it.
-    from backend.rag.reranker import RERANK_CANDIDATES
-    from backend.rag.retriever import run_hybrid_query
+    from backend.rag.retriever import hybrid_candidate_pool, run_hybrid_query
 
     q = query.strip()
-    pool = max(k, RERANK_CANDIDATES) if config.RERANK_ENABLED else k
+    pool = hybrid_candidate_pool(k, rerank=config.RERANK_ENABLED)
     try:
         results = run_hybrid_query(
             profile,

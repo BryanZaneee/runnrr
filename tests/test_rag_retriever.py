@@ -3,9 +3,11 @@ from __future__ import annotations
 import backend.rag.retriever as retriever_mod
 from backend.rag.chunker import Chunk
 from backend.rag.embeddings import FakeEmbeddingProvider
+from backend.rag.reranker import RERANK_CANDIDATES
 from backend.rag.retriever import (
     RetrievalResult,
     Retriever,
+    hybrid_candidate_pool,
     reciprocal_rank_fusion,
     run_hybrid_query,
 )
@@ -29,6 +31,19 @@ def _chunk(chunk_id: str, path: str, content: str) -> Chunk:
         content=content,
         tokens_est=1,
     )
+
+
+def test_hybrid_candidate_pool_without_rerank_widens_to_k_times_four() -> None:
+    assert hybrid_candidate_pool(1, rerank=False) == 4
+    assert hybrid_candidate_pool(5, rerank=False) == 20
+    # Defensive: non-positive k floors to 1 before widening.
+    assert hybrid_candidate_pool(0, rerank=False) == 4
+
+
+def test_hybrid_candidate_pool_with_rerank_uses_rerank_floor() -> None:
+    assert hybrid_candidate_pool(1, rerank=True) == RERANK_CANDIDATES
+    # A large k past the rerank floor still wins.
+    assert hybrid_candidate_pool(RERANK_CANDIDATES + 10, rerank=True) == RERANK_CANDIDATES + 10
 
 
 def test_reciprocal_rank_fusion_merges_sources_and_keeps_ranks() -> None:

@@ -8,6 +8,7 @@ from typing import Sequence
 
 from backend.config import PROFILE_ROOT
 from backend.evals.datasets import load_rag_dataset
+from backend.evals.records import recall_metric
 from backend.evals.runner import RAGEvaluator
 from backend.profiles import load_profile
 from backend.rag.embeddings import get_embedding_provider
@@ -71,7 +72,7 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     case_ids = sorted(set(base) | set(cand))
 
     metrics = (
-        "recall_at_5",
+        "recall_at_k",
         "context_precision",
         "reciprocal_rank",
         "faithfulness",
@@ -114,8 +115,8 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     for cid in case_ids:
         if cid not in base or cid not in cand:
             continue
-        br = base[cid]["metrics"].get("recall_at_5")
-        cr = cand[cid]["metrics"].get("recall_at_5")
+        br = recall_metric(base[cid]["metrics"])
+        cr = recall_metric(cand[cid]["metrics"])
         if br is not None and cr is not None and cr < br:
             failing.append(cid)
 
@@ -144,7 +145,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
         created = summary.get("created_at", "?")
         recalls = []
         for variant, stats in (summary.get("per_variant") or {}).items():
-            r = stats.get("recall_at_5")
+            r = recall_metric(stats)
             if r is not None:
                 recalls.append(f"{variant}={r:.2f}")
         headline = ", ".join(recalls) if recalls else "(no recall)"
@@ -266,7 +267,11 @@ def _load_records(run_dir: Path) -> list[dict]:
     records: list[dict] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip():
-            records.append(json.loads(line))
+            rec = json.loads(line)
+            metrics = rec.get("metrics")
+            if isinstance(metrics, dict) and "recall_at_k" not in metrics:
+                metrics["recall_at_k"] = recall_metric(metrics)
+            records.append(rec)
     return records
 
 

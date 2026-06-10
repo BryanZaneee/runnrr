@@ -8,6 +8,51 @@ the source code alone. New decisions go at the top, dated. Each entry should ans
 
 ---
 
+## 2026-06-05 — BZS Software owns the public sales positioning
+
+### Decision: Keep EasyAgent internal while demos sell BZS workflow systems
+**Choice:** Reframed `docs/sales_pitch.md` around BZS Software's public offer:
+workflow mapping, AI opportunity discovery, AI-assisted workflow builds, and
+managed tuning. The Sales Concierge profile, catalog, smoke prompts, and profile
+copy now use BZS Software language so a customer demo does not expose
+"EasyAgent" as the product name. The BZS wording lives in profile
+`tool_descriptions` overrides — engine tool wording in `backend/tools/sales.py`
+stays business-neutral and the checkout preview URL is a neutral placeholder,
+per the "engine stays business-agnostic" rule. EasyAgent remains the internal
+framework and technical proof point for reusable profiles, safe tools, provider
+flexibility, guardrails, and evals.
+
+**Why:** Customers will contact BZS Software for expertise in identifying where
+AI can save time and money, not to buy a product called EasyAgent. The pitch
+needs to start from business efficiency and workflow outcomes, then use the
+EasyAgent repo as delivery evidence only when technical buyers ask how the work
+is implemented.
+
+**Rejected:** Renaming the internal `sales-concierge` profile id or package ids
+in this pass. Those ids are stable test/tool handles; the customer-visible
+names and descriptions can change without destabilizing routing.
+
+## 2026-06-05 — Business sales pitch and demo runbook added
+
+### Decision: Sell EasyAgent through concrete workflow demos, not generic AI claims
+**Choice:** Added `docs/sales_pitch.md` as a buyer-facing pitch and call
+runbook. The document frames EasyAgent around business pain points, a scoped
+offer ladder, discovery questions, and two primary demos: Sales Concierge for
+catalog-backed lead qualification and preview-only revenue actions, and Customer
+Service for grounded support deflection and escalation. README now links to the
+runbook from the "More detail" section.
+
+**Why:** The repo already contains business-oriented profiles, safe preview
+tools, profile-local prompts, RAG/eval datasets, and production guardrails. A
+sales conversation should show those working boundaries through visible
+workflow proof instead of over-positioning EasyAgent as a generic chatbot or
+claiming live integrations that are still preview-only.
+
+**Rejected:** Creating a slide deck before the demo story is stable; adding new
+production CRM or Stripe behavior; or rewriting profile prompts just to make
+the pitch sound bigger. The current value is best shown by the existing
+portable profile architecture and safe tool loop.
+
 ## 2026-06-01 — Code review contracts made explicit
 
 ### Decision: Treat profile/API/tool contracts as runtime boundaries

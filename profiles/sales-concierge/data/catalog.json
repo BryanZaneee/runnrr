@@ -1,91 +1,93 @@
 {
-  "name": "EasyAgent demo catalog",
+  "name": "BZS Software workflow catalog",
   "currency": "USD",
   "packages": [
     {
       "id": "starter-widget",
-      "name": "Starter Website Widget",
-      "category": "website",
-      "description": "A focused EasyAgent chat widget backed by a small curated knowledge base and one profile.",
-      "best_for": "Small businesses or portfolio sites that need a grounded assistant without live business-system integrations.",
-      "price_display": "Demo estimate: from $750 setup",
-      "timeline": "1-2 weeks",
+      "name": "Workflow Review",
+      "category": "review",
+      "description": "A focused BZS Software review that maps how work moves, finds bottlenecks, and identifies the three highest-leverage AI opportunities.",
+      "best_for": "Businesses that know manual work is costing time or money but need help choosing the first workflow to improve.",
+      "price_display": "Public offer: free 30-minute call",
+      "timeline": "Same week",
       "features": [
-        "Profile prompt and welcome copy",
-        "Markdown knowledge base",
-        "Server-side model provider keys",
-        "Basic rate-limit and budget guardrails"
+        "Workflow map",
+        "Bottleneck analysis",
+        "Opportunity sizing",
+        "Prioritized build plan"
       ],
-      "keywords": ["website", "widget", "support", "portfolio", "starter", "kb"],
-      "next_step": "Collect business FAQs, service details, and preferred tone."
+      "keywords": ["review", "workflow", "map", "audit", "bottleneck", "starter", "ai"],
+      "next_step": "Book a workflow review and bring one real process with examples."
     },
     {
       "id": "research-profile",
-      "name": "Research Analyst Profile",
-      "category": "profile",
-      "description": "A public-research profile with web search, safe page fetching, and deterministic calculation tools.",
-      "best_for": "Teams that need repeatable market scans, competitor summaries, sourcing, and lightweight analysis.",
-      "price_display": "Demo estimate: from $1,200 setup",
+      "name": "AI Opportunity Audit",
+      "category": "analysis",
+      "description": "A deeper BZS analysis of where AI can reduce admin time, speed up decisions, or improve customer response across a business workflow.",
+      "best_for": "Teams that need a structured recommendation before investing in an AI workflow build.",
+      "price_display": "Scoped after workflow review",
       "timeline": "1-2 weeks",
       "features": [
-        "Research-focused system prompt",
-        "Tavily web search integration",
-        "Safe public page fetches",
-        "Calculation helper for comparisons"
+        "Workflow discovery",
+        "Manual effort estimate",
+        "Automation candidate ranking",
+        "Implementation plan"
       ],
-      "keywords": ["research", "analyst", "market", "competitor", "brief", "web"],
-      "next_step": "Define the research domains, source quality bar, and preferred brief format."
+      "keywords": ["research", "analysis", "audit", "efficiency", "time", "money", "brief"],
+      "next_step": "Define the workflow, current tools, and what a win would look like."
     },
     {
       "id": "sales-profile",
-      "name": "Sales Concierge Profile",
-      "category": "profile",
-      "description": "A sales assistant profile that explains packages, qualifies visitors, and previews lead and checkout flows.",
-      "best_for": "Consultants, agencies, and SaaS teams that want a guided product-selection experience.",
-      "price_display": "Demo estimate: from $1,500 setup",
+      "name": "Lead Reply & Qualification System",
+      "category": "workflow",
+      "description": "A BZS-built workflow that helps respond to inbound leads, draft replies, qualify fit, prepare next steps, and keep follow-ups from slipping.",
+      "best_for": "Service businesses, agencies, and teams that lose revenue when lead replies or follow-ups are slow.",
+      "price_display": "Custom one-time build",
       "timeline": "1-3 weeks",
       "features": [
-        "Structured product catalog",
+        "Lead intake mapping",
+        "AI-drafted replies",
         "Lead qualification rules",
-        "Preview-only lead capture",
-        "Preview-only checkout links"
+        "Human approval steps",
+        "Follow-up reminders"
       ],
-      "keywords": ["sales", "lead", "pricing", "checkout", "package", "concierge"],
-      "next_step": "Provide packages, qualification criteria, and human handoff rules."
+      "keywords": ["sales", "lead", "revenue", "reply", "follow-up", "qualification", "concierge"],
+      "next_step": "Provide lead sources, response rules, handoff criteria, and current tools."
     },
     {
       "id": "custom-tools",
-      "name": "Custom Tool Integration",
+      "name": "Custom Workflow Integration",
       "category": "tools",
-      "description": "A scoped native tool integration for systems such as Stripe, calendars, CRMs, internal APIs, or document stores.",
-      "best_for": "Workflows that need the agent to do more than answer from a knowledge base.",
-      "price_display": "Demo estimate: from $2,500 per tool surface",
+      "description": "A scoped BZS integration for systems such as CRMs, calendars, inboxes, payment tools, internal APIs, or document stores.",
+      "best_for": "Workflows that need AI to prepare or route real work inside existing business systems.",
+      "price_display": "Custom scoped build",
       "timeline": "2-4 weeks",
       "features": [
+        "Existing-tool mapping",
         "Server-side credentials",
-        "Tool schema and dispatcher",
-        "Profile allowlist controls",
+        "Allowed action controls",
         "Mocked tests and failure handling"
       ],
-      "keywords": ["tool", "api", "integration", "stripe", "calendar", "crm", "mcp"],
+      "keywords": ["tool", "api", "integration", "payment", "calendar", "crm", "inbox", "documents"],
       "next_step": "Choose the first external system and define allowed read/write actions."
     },
     {
       "id": "production-hardening",
-      "name": "Production Hardening",
+      "name": "Run & Tune",
       "category": "operations",
-      "description": "Operational safeguards for deploying EasyAgent in a public or client-facing environment.",
-      "best_for": "Teams preparing to expose a profile to real users and real traffic.",
-      "price_display": "Demo estimate: from $2,000",
+      "description": "Managed BZS support for measuring, tuning, and expanding an AI workflow after launch.",
+      "best_for": "Businesses that want the workflow to keep improving as the team and customer volume change.",
+      "price_display": "Monthly managed plan",
       "timeline": "1-3 weeks",
       "features": [
-        "Per-IP rate limits",
-        "Daily token budgets",
-        "Structured logs",
-        "Deployment runbook and smoke prompts"
+        "Outcome dashboard",
+        "Monthly tuning",
+        "Priority support",
+        "New workflow opportunities",
+        "Operational guardrails"
       ],
-      "keywords": ["production", "deploy", "security", "logging", "rate", "budget"],
-      "next_step": "Confirm deployment target, traffic expectations, and incident handoff path."
+      "keywords": ["run", "managed", "production", "deploy", "support", "tuning", "dashboard", "budget"],
+      "next_step": "Confirm the target outcome, reporting cadence, and support expectations."
     }
   ]
 }

@@ -1,7 +1,7 @@
 [
   {
     "id": "sales-package-fit",
-    "task": "I run a small agency and want an assistant to explain my services and qualify leads. Which EasyAgent package fits?",
+    "task": "I run a small agency and lose time replying to leads and chasing follow-ups. Where could AI save us time and money?",
     "expected_tools": ["catalog_lookup", "qualify_lead"],
     "criteria": [
       "Recommends only catalog-backed packages",

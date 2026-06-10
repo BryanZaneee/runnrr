@@ -2,7 +2,7 @@
   {
     "_comment": "Placeholder — sales-concierge has no semantic KB index; recall metrics are N/A.",
     "id": "package-fit",
-    "query": "Which EasyAgent package fits a small coffee shop that only needs website chat?",
+    "query": "Where could BZS Software help a small coffee shop save time with website chat?",
     "expected_chunk_paths": [],
     "ground_truth_answer": "",
     "criteria": ["catalog_lookup or qualify_lead", "preview-only disclaimer"]

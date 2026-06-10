@@ -1,11 +1,15 @@
 {
   "id": "sales-concierge",
   "label": "Sales Concierge",
-  "description": "EasyAgent sales assistant for package lookup, lead qualification, and preview-only checkout flows.",
+  "description": "BZS Software sales assistant for AI workflow discovery, lead qualification, and preview-only next-step flows.",
   "kb_root": "profiles/sales-concierge/kb",
   "data_root": "profiles/sales-concierge/data",
   "system_prompt_path": "profiles/sales-concierge/system.md",
   "tools": ["catalog_lookup", "qualify_lead", "lead_capture_preview", "checkout_link_preview", "calculator"],
+  "tool_descriptions": {
+    "catalog_lookup": "Search the BZS Software workflow-offer catalog (catalog.json under the profile data root) for packages matching what the visitor needs.",
+    "qualify_lead": "Classify a prospective BZS Software lead using demo qualification rules. Returns a lead tier, recommended catalog package id, missing questions, and reasoning labels. Preview-only; does not write to a CRM."
+  },
   "mcp_servers": [],
   "brand": {
     "accent": "#7C3AED",
@@ -14,12 +18,12 @@
     "accent_gold": "#D8A72F",
     "hero_icon": " ____\n|$  |\n|___|",
     "intro_ascii_name": " ____        _            \n/ ___|  __ _| | ___  ___  \n\\___ \\ / _` | |/ _ \\/ __| \n ___) | (_| | |  __/\\__ \\ \n|____/ \\__,_|_|\\___||___/ ",
-    "input_placeholder": "ask Sales Concierge which EasyAgent package fits..."
+    "input_placeholder": "ask BZS Software where AI could save time..."
   },
-  "welcome": "I help visitors choose the right EasyAgent package, qualify fit, and preview next steps. Lead capture and checkout actions here are demos, not live submissions.",
+  "welcome": "I help visitors identify where AI could save time and money, qualify fit for a BZS workflow review, and preview next steps. Lead capture and checkout actions here are demos, not live submissions.",
   "suggestions": [
-    "Which EasyAgent package fits my business?",
-    "Can you qualify my use case?",
-    "Show me a checkout preview for a pilot"
+    "Where could AI save my business time?",
+    "Can you qualify my workflow?",
+    "Show me a workflow review preview"
   ]
 }

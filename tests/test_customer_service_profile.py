@@ -59,10 +59,12 @@ def test_sales_concierge_profile_loads_with_data_root():
     )
     assert p.brand["accent"] == "#7C3AED"
     assert p.brand["intro_ascii_name"]
-    assert "Sales Concierge" in p.brand["input_placeholder"]
+    assert "BZS Software" in p.brand["input_placeholder"]
     assert p.data_root is not None
     assert p.data_root.parts[-2:] == ("sales-concierge", "data")
     assert (p.data_root / "catalog.json").exists()
+    assert "BZS Software" in p.tool_descriptions["catalog_lookup"]
+    assert "BZS Software" in p.tool_descriptions["qualify_lead"]
     assert "<workflow>" in p.system_prompt
     assert "<quality_bar>" in p.system_prompt
 
@@ -71,6 +73,7 @@ def test_new_profile_smoke_eval_datasets_are_structured():
     for path in (
         Path("profiles/research-analyst/evals/smoke.json"),
         Path("profiles/sales-concierge/evals/smoke.json"),
+        Path("profiles/bzs-concierge/evals/smoke.json"),
     ):
         cases = json.loads(path.read_text(encoding="utf-8"))
         assert len(cases) >= 3

@@ -1,0 +1,26 @@
+{
+  "id": "bzs-concierge",
+  "label": "BZS Concierge",
+  "description": "BZS Software website concierge: helps visitors find where AI could save time, qualifies fit for a workflow review, and previews next steps. Public demo on bzssoftware.com.",
+  "kb_root": "profiles/bzs-concierge/kb",
+  "data_root": "profiles/bzs-concierge/data",
+  "system_prompt_path": "profiles/bzs-concierge/system.md",
+  "tools": ["catalog_lookup", "qualify_lead", "lead_capture_preview", "calculator"],
+  "tool_descriptions": {
+    "catalog_lookup": "Search the BZS Software workflow-offer catalog (catalog.json under the profile data root) for packages matching what the visitor needs.",
+    "qualify_lead": "Classify a prospective BZS Software lead using demo qualification rules. Returns a lead tier, recommended catalog package id, missing questions, and reasoning labels. Preview-only; does not write to a CRM."
+  },
+  "mcp_servers": [],
+  "brand": {
+    "accent": "#1D4D7A",
+    "accent_dark": "#133452",
+    "accent_soft": "#ECF1F7",
+    "input_placeholder": "ask where AI could save your business time..."
+  },
+  "welcome": "I'm the BZS concierge. Tell me about your business and I'll show you where AI could save time, and whether a workflow review is a fit. Anything I capture here is a preview, not a live submission.",
+  "suggestions": [
+    "Where could AI save my roofing business time?",
+    "We miss calls during jobs. Can you help?",
+    "What does a workflow review cover?"
+  ]
+}

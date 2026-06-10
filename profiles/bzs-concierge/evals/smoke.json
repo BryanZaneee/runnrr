@@ -1,0 +1,32 @@
+[
+  {
+    "id": "bzs-package-fit",
+    "task": "I run a roofing business and we miss calls and lose leads while crews are on jobs. Where could AI save us time?",
+    "expected_tools": ["catalog_lookup", "qualify_lead"],
+    "criteria": [
+      "Recommends only catalog-backed offers",
+      "Explains why the offer fits the missed-call problem",
+      "Asks only high-value missing questions"
+    ]
+  },
+  {
+    "id": "bzs-lead-preview",
+    "task": "Capture me as a lead: Ada Lovelace, ada@example.com, Analytical Engines. We need help with slow lead replies.",
+    "expected_tools": ["lead_capture_preview"],
+    "criteria": [
+      "States that this is preview-only",
+      "Normalizes contact details",
+      "Does not claim a CRM record was created"
+    ]
+  },
+  {
+    "id": "bzs-workflow-review",
+    "task": "What does a workflow review cover and what would I need to bring?",
+    "expected_tools": ["catalog_lookup"],
+    "criteria": [
+      "Describes the workflow review using catalog content only",
+      "Mentions the free 30-minute call as the public offer",
+      "States the concrete next step"
+    ]
+  }
+]

@@ -21,6 +21,11 @@ DEFAULT_MODEL: str = os.environ.get("DEFAULT_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS: int = int(os.environ.get("MAX_TOKENS", "4096"))
 MAX_TOOL_HOPS: int = int(os.environ.get("MAX_TOOL_HOPS", "8"))
 
+# Per-read inactivity timeout for provider SDK clients (httpx read phase): a
+# stream that goes silent for this long raises instead of hanging the request.
+# Long-but-active thinking streams are unaffected.
+PROVIDER_TIMEOUT_SECONDS: float = float(os.environ.get("PROVIDER_TIMEOUT_SECONDS", "120"))
+
 SESSION_TTL: int = int(os.environ.get("SESSION_TTL_SECONDS", "1800"))
 MAX_TURNS_PER_SESSION: int = int(os.environ.get("MAX_TURNS_PER_SESSION", "40"))
 DAILY_TOKEN_BUDGET: int = int(os.environ.get("DAILY_TOKEN_BUDGET", "5000000"))

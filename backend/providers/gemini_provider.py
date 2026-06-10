@@ -8,6 +8,7 @@ from typing import Any, AsyncIterator
 from google import genai
 from google.genai import types
 
+from backend.config import PROVIDER_TIMEOUT_SECONDS
 from backend.profiles import AgentProfile
 from backend.providers.base import Event
 from backend.tools import ToolResult, schemas_for_tools
@@ -16,7 +17,11 @@ from backend.types import ProviderMessage, UsagePayload
 
 class GeminiProvider:
     def __init__(self, *, api_key_env: str = "GEMINI_API_KEY", client: Any | None = None) -> None:
-        self.client = client or genai.Client(api_key=os.environ[api_key_env])
+        self.client = client or genai.Client(
+            api_key=os.environ[api_key_env],
+            # google-genai takes the timeout in milliseconds.
+            http_options=types.HttpOptions(timeout=int(PROVIDER_TIMEOUT_SECONDS * 1000)),
+        )
 
     def format_user(self, text: str) -> ProviderMessage:
         return types.Content(role="user", parts=[types.Part.from_text(text=text)])

@@ -11,6 +11,7 @@ from typing import Any, AsyncIterator
 
 from openai import AsyncOpenAI
 
+from backend.config import PROVIDER_TIMEOUT_SECONDS
 from backend.profiles import AgentProfile
 from backend.providers.base import Event
 from backend.tools import ToolResult, schemas_for_tools
@@ -40,6 +41,7 @@ class OpenAICompatProvider:
         self.client = client or AsyncOpenAI(
             api_key=os.environ[api_key_env],
             base_url=base_url,
+            timeout=PROVIDER_TIMEOUT_SECONDS,
         )
 
     def format_user(self, text: str) -> ProviderMessage:

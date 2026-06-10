@@ -77,6 +77,49 @@ async def _drain(provider, messages, tools=None):
 
 
 # --------------------------------------------------------------------------- #
+# SDK client timeouts — PROVIDER_TIMEOUT_SECONDS reaches each constructed client
+# --------------------------------------------------------------------------- #
+
+
+class TestProviderTimeouts:
+    def test_anthropic_client_gets_timeout(self, monkeypatch):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key")
+        from backend.config import PROVIDER_TIMEOUT_SECONDS
+        from backend.providers.anthropic_provider import AnthropicProvider
+
+        provider = AnthropicProvider()
+        assert provider.client.timeout == PROVIDER_TIMEOUT_SECONDS
+
+    def test_openai_compat_client_gets_timeout(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
+        from backend.config import PROVIDER_TIMEOUT_SECONDS
+
+        provider = OpenAICompatProvider(api_key_env="OPENAI_API_KEY")
+        assert provider.client.timeout == PROVIDER_TIMEOUT_SECONDS
+
+    def test_gemini_client_gets_timeout_in_milliseconds(self, monkeypatch):
+        import backend.providers.gemini_provider as gp
+        from backend.config import PROVIDER_TIMEOUT_SECONDS
+
+        recorded: dict = {}
+
+        class RecorderClient:
+            def __init__(self, **kwargs):
+                recorded.update(kwargs)
+
+        monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+        monkeypatch.setattr(gp.genai, "Client", RecorderClient)
+
+        gp.GeminiProvider()
+        assert recorded["http_options"].timeout == int(PROVIDER_TIMEOUT_SECONDS * 1000)
+
+    def test_injected_test_client_is_untouched(self):
+        client = FakeOpenAIClient([])
+        provider = OpenAICompatProvider(api_key_env="NO_SUCH_KEY", client=client)
+        assert provider.client is client
+
+
+# --------------------------------------------------------------------------- #
 # Thinking-mode wiring — extra_body + reasoning_effort
 # --------------------------------------------------------------------------- #
 

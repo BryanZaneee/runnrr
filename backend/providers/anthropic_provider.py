@@ -7,6 +7,7 @@ from typing import Any, AsyncIterator
 
 from anthropic import AsyncAnthropic
 
+from backend.config import PROVIDER_TIMEOUT_SECONDS
 from backend.profiles import AgentProfile
 from backend.providers.base import Event
 from backend.tools import ToolResult, schemas_for_tools
@@ -15,7 +16,10 @@ from backend.types import ProviderMessage, UsagePayload
 
 class AnthropicProvider:
     def __init__(self, *, thinking_budget: int | None = None) -> None:
-        self.client = AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        self.client = AsyncAnthropic(
+            api_key=os.environ["ANTHROPIC_API_KEY"],
+            timeout=PROVIDER_TIMEOUT_SECONDS,
+        )
         # When set, enable extended thinking with this budget. The API requires
         # max_tokens > thinking.budget_tokens, so the stream call also bumps
         # max_tokens upward if the caller's value would underflow.

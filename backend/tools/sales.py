@@ -234,7 +234,7 @@ def checkout_link_preview(
     }
     return {
         "checkout_url": (
-            "https://checkout.easyagent.example/preview/"
+            "https://checkout.example/preview/"
             f"{package.get('id', '')}?cadence={cadence}&quantity={quantity}"
         ),
         "line_items": [line_item],
@@ -322,9 +322,8 @@ SALES_TOOL_DEFS: tuple[ToolDef, ...] = (
     ToolDef(
         name="catalog_lookup",
         description=(
-            "Search the active profile's structured product or service catalog. For "
-            "Sales Concierge this reads EasyAgent packages from catalog.json under "
-            "the profile data root."
+            "Search the active profile's structured product or service catalog, read "
+            "from catalog.json under the profile data root."
         ),
         input_schema={
             "type": "object",
@@ -344,7 +343,7 @@ SALES_TOOL_DEFS: tuple[ToolDef, ...] = (
     ToolDef(
         name="qualify_lead",
         description=(
-            "Classify a prospective EasyAgent lead using demo qualification rules. "
+            "Classify a prospective lead using demo qualification rules. "
             "Returns a lead tier, recommended catalog package id, missing questions, "
             "and reasoning labels. Preview-only; does not write to a CRM."
         ),

@@ -597,7 +597,7 @@ class TestSalesPreviewTools:
         )
         assert result.is_error is False
         body = json.loads(result.content)
-        assert body["checkout_url"].startswith("https://checkout.easyagent.example/preview/")
+        assert body["checkout_url"].startswith("https://checkout.example/preview/")
         assert body["line_items"][0]["quantity"] == 2
         assert body["stripe_session_created"] is False
         assert body["preview_only"] is True

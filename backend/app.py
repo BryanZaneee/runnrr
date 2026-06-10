@@ -378,6 +378,9 @@ async def _sse_format(events: AsyncIterator[dict]) -> AsyncIterator[bytes]:
             ev_type = ev.pop("event")
             payload = json.dumps(ev, ensure_ascii=False)
             yield f"event: {ev_type}\ndata: {payload}\n\n".encode("utf-8")
-    except Exception as e:
-        payload = json.dumps({"message": f"{type(e).__name__}: {e}"})
+    except Exception:
+        # Never forward exception text to the public stream — it can carry
+        # provider/internal details. Full traceback goes to the server log.
+        log.exception("sse stream failed")
+        payload = json.dumps({"message": "internal error while streaming the response"})
         yield f"event: error\ndata: {payload}\n\n".encode("utf-8")

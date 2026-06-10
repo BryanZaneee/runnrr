@@ -161,6 +161,36 @@ class TestProfiles:
 
 
 # --------------------------------------------------------------------------- #
+# SSE wire format
+# --------------------------------------------------------------------------- #
+
+
+class TestSSEFormat:
+    @pytest.mark.asyncio
+    async def test_stream_exception_is_sanitized(self, caplog):
+        import logging
+
+        from backend.app import _sse_format
+
+        async def exploding_events():
+            yield {"event": "delta", "text": "partial"}
+            raise RuntimeError("sk-secret-123 internal detail")
+
+        with caplog.at_level(logging.ERROR, logger="easyagent"):
+            frames = [f async for f in _sse_format(exploding_events())]
+
+        body = b"".join(frames).decode("utf-8")
+        # The partial event still went out, then a generic error frame.
+        assert "event: delta" in body
+        assert body.rstrip().split("\n\n")[-1].startswith("event: error")
+        assert "internal error while streaming the response" in body
+        assert "sk-secret-123" not in body
+        # Full traceback lands in the server log instead.
+        assert any("sse stream failed" in rec.getMessage() for rec in caplog.records)
+        assert any("sk-secret-123" in str(rec.exc_info) for rec in caplog.records if rec.exc_info)
+
+
+# --------------------------------------------------------------------------- #
 # /api/chat
 # --------------------------------------------------------------------------- #
 

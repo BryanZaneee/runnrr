@@ -49,6 +49,21 @@ def run_tool(
                 arguments=arguments,
                 context=context,
             )
+        if "_raw_arguments" in arguments:
+            # Sentinel from a provider that could not JSON-decode the streamed
+            # tool arguments (see _parse_arguments in openai_compat_provider.py).
+            # Without this check the handler fails with a misleading
+            # "missing required argument" message.
+            return _tool_result(
+                tool_use_id=tool_use_id,
+                name=name,
+                content=json.dumps(
+                    {"error": "tool arguments were not valid JSON; retry with well-formed JSON arguments"}
+                ),
+                is_error=True,
+                arguments=arguments,
+                context=context,
+            )
         out = handler(arguments, context)
         return _tool_result(
             tool_use_id=tool_use_id,

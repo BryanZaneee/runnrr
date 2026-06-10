@@ -312,6 +312,23 @@ class TestToolCallAccumulation:
         assert completes[0]["arguments"] == {"query": "foo"}
         assert completes[0]["tool_use_id"] == "call_x"
 
+    @pytest.mark.asyncio
+    async def test_malformed_arguments_yield_raw_sentinel(self):
+        client = FakeOpenAIClient([
+            _chunk(choices=[_choice(delta=_delta(tool_calls=[
+                _tool_call(index=0, id_="call_bad", name="search_kb", args='{"query": broke')
+            ]))]),
+            _chunk(choices=[_choice(delta=_delta(), finish_reason="tool_calls")]),
+        ])
+        provider = OpenAICompatProvider(api_key_env="OPENAI_API_KEY", client=client)
+
+        events = await _drain(provider, [])
+
+        completes = [e for e in events if e["type"] == "tool_use_complete"]
+        assert len(completes) == 1
+        # run_tool recognizes this sentinel and asks the model to retry.
+        assert completes[0]["arguments"] == {"_raw_arguments": '{"query": broke'}
+
 
 # --------------------------------------------------------------------------- #
 # _norm_usage — DeepSeek prompt_cache_hit_tokens mapping

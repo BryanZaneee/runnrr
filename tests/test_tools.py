@@ -236,6 +236,16 @@ class TestRunTool:
         assert result.is_error is True
         assert "path" in json.loads(result.content)["error"]
 
+    def test_unparsed_arguments_sentinel_returns_clear_error(self):
+        # Providers fall back to {"_raw_arguments": raw} when streamed tool-call
+        # JSON cannot be decoded; the model should get a retry hint, not a
+        # misleading "missing required argument" message.
+        result = run_tool("search_kb", {"_raw_arguments": "{broken"}, tool_use_id="t6b")
+        assert result.is_error is True
+        error = json.loads(result.content)["error"]
+        assert "not valid JSON" in error
+        assert "retry" in error
+
     def test_unknown_project_returns_is_error(self):
         result = run_tool(
             "get_project_context", {"project_name": "nope"}, tool_use_id="t7"
@@ -641,6 +651,26 @@ class TestSalesPreviewTools:
         )
         assert result.is_error is True
         assert "data_root" in json.loads(result.content)["error"]
+
+    def test_symlinked_catalog_outside_data_root_is_rejected(self, tmp_path):
+        outside = tmp_path / "outside-catalog.json"
+        outside.write_text(json.dumps({"packages": []}), encoding="utf-8")
+        data_root = tmp_path / "data"
+        data_root.mkdir()
+        link = data_root / "catalog.json"
+        try:
+            link.symlink_to(outside)
+        except OSError as exc:
+            pytest.skip(f"symlinks unavailable: {exc}")
+
+        result = run_tool(
+            "catalog_lookup",
+            {"query": "anything"},
+            tool_use_id="catalog-symlink",
+            data_root=data_root,
+        )
+        assert result.is_error is True
+        assert "escapes data root" in json.loads(result.content)["error"]
 
 
 # --------------------------------------------------------------------------- #

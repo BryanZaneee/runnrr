@@ -20,6 +20,8 @@ def _require_data_root(data_root: Path | None) -> Path:
 
 def _load_catalog(data_root: Path | None) -> dict[str, Any]:
     root = _require_data_root(data_root)
+    # .resolve() follows symlinks, so a catalog.json symlinked outside the data
+    # root fails the relative_to check below.
     path = (root / "catalog.json").resolve()
     try:
         path.relative_to(root)

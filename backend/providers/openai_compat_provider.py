@@ -207,6 +207,9 @@ def _parse_arguments(raw: str) -> dict:
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
+        # Sentinel recognized by run_tool in backend/tools/dispatch.py: it turns
+        # this into a "retry with well-formed JSON" error the model can act on,
+        # while the raw text stays available for logs.
         return {"_raw_arguments": raw}
     return parsed if isinstance(parsed, dict) else {"value": parsed}
 

@@ -122,6 +122,7 @@ This public repo does **not** include the personal knowledge base, resume files,
 
 - [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) — standing rules and a one-screen architecture tour for contributors and agents.
 - [`history.md`](history.md) — dated decision log (what was chosen and what was rejected), including the June 2026 RAG + eval roadmap.
+- [`docs/sales_pitch.md`](docs/sales_pitch.md) — BZS Software pitch, discovery questions, and demo runbooks for business workflow conversations.
 - [`docs/agent_best_practices.md`](docs/agent_best_practices.md) — checklist for API boundaries, model selection, prompts, tools, streaming, retrieval, and evals.
 
 ## Forward-looking ideas

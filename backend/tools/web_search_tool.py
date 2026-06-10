@@ -45,6 +45,12 @@ WEB_SEARCH_TOOL = ToolDef(
                     "for harder queries. Default 'basic'."
                 ),
             },
+            "include_answer": {
+                "type": "boolean",
+                "description": (
+                    "Include a synthesized answer above the ranked results. Default true."
+                ),
+            },
         },
         "required": ["query"],
     },

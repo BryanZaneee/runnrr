@@ -214,6 +214,13 @@ class TestRunTool:
         result = run_tool("get_resume_summary", {}, tool_use_id="t3")
         assert result.is_error is False
 
+    def test_dispatch_list_kb_without_subdir(self):
+        # subdir is optional: the handler defaults to "" (top-level listing).
+        result = run_tool("list_kb", {}, tool_use_id="t3b")
+        assert result.is_error is False
+        payload = json.loads(result.content)
+        assert isinstance(payload, list) and len(payload) > 0
+
     def test_path_traversal_returns_is_error(self):
         result = run_tool("read_file", {"path": "../../../etc/passwd"}, tool_use_id="t4")
         assert result.is_error is True
@@ -372,6 +379,30 @@ class TestWebSearch:
         result = run_tool("web_search", {"query": "anything"}, tool_use_id="ws2")
         assert result.is_error is True
         assert "TAVILY_API_KEY" in json.loads(result.content)["error"]
+
+    def test_include_answer_is_in_schema_and_reaches_tavily(self, monkeypatch):
+        from backend.tools import SCHEMAS
+
+        schema = next(s for s in SCHEMAS if s["name"] == "web_search")
+        assert "include_answer" in schema["input_schema"]["properties"]
+
+        monkeypatch.setenv("TAVILY_API_KEY", "fake-key")
+        captured: dict = {}
+
+        def fake_post(url, json, timeout):  # noqa: A002
+            captured["json"] = json
+            return _StubResponse(200, {"query": "q", "results": []})
+
+        import backend.web_search as ws
+        monkeypatch.setattr(ws.httpx, "post", fake_post)
+
+        result = run_tool(
+            "web_search",
+            {"query": "q", "include_answer": False},
+            tool_use_id="ws3",
+        )
+        assert result.is_error is False
+        assert captured["json"]["include_answer"] is False
 
     def test_empty_query_returns_is_error(self, monkeypatch):
         monkeypatch.setenv("TAVILY_API_KEY", "fake-key")

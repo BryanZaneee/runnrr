@@ -60,7 +60,7 @@ KB_TOOL_DEFS: tuple[ToolDef, ...] = (
                     ),
                 }
             },
-            "required": ["subdir"],
+            "required": [],
         },
         handler=_handle_list_kb,
         source_metadata=list_kb_metadata,

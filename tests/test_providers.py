@@ -1,7 +1,10 @@
-"""Provider-level tests for OpenAICompatProvider — DeepSeek thinking mode + cache fields.
+"""Provider-level tests for OpenAICompatProvider and GeminiProvider.
 
-A FakeOpenAIClient mocks AsyncOpenAI's chat.completions.create() and is injected
-via the provider's `client=` kwarg, so no real API is called.
+Fake clients mock each SDK's streaming entry point (AsyncOpenAI's
+chat.completions.create(), genai's aio.models.generate_content_stream) and are
+injected via the providers' `client=` kwarg, so no real API is called. Covers
+DeepSeek thinking mode, cache fields, SDK timeouts, and the Gemini streaming /
+message-mutation / tool-pairing contracts.
 """
 from __future__ import annotations
 
@@ -383,3 +386,187 @@ class TestDeepSeekModelSurface:
         deepseek_entry = next(m for m in body["models"] if m["id"] == "deepseek-v4-flash")
         assert deepseek_entry["provider"] == "openai_compat"
         assert deepseek_entry["vendor"] == "DeepSeek"
+
+
+# --------------------------------------------------------------------------- #
+# GeminiProvider — streaming, message mutation, tool pairing, usage mapping
+# --------------------------------------------------------------------------- #
+
+
+def _gemini_chunk(*, text=None, parts=None, usage=None):
+    candidates = []
+    if parts is not None:
+        candidates = [SimpleNamespace(content=SimpleNamespace(parts=parts))]
+    return SimpleNamespace(text=text, candidates=candidates, usage_metadata=usage)
+
+
+def _gemini_fc_part(*, id_=None, name="", args=None):
+    return SimpleNamespace(
+        function_call=SimpleNamespace(id=id_, name=name, args=args or {})
+    )
+
+
+class FakeGeminiClient:
+    """Mirrors genai.Client's aio.models.generate_content_stream(...)."""
+
+    def __init__(self, chunks):
+        self._chunks = chunks
+        self.last_request: dict | None = None
+        self.aio = SimpleNamespace(
+            models=SimpleNamespace(generate_content_stream=self._stream)
+        )
+
+    async def _stream(self, **kwargs):
+        self.last_request = kwargs
+
+        async def _gen():
+            for c in self._chunks:
+                yield c
+
+        return _gen()
+
+
+async def _drain_gemini(provider, messages):
+    events = []
+    async for ev in provider.stream(
+        model="gemini-2.5-flash",
+        messages=messages,
+        system="sys",
+        tools=[],
+        max_tokens=1024,
+    ):
+        events.append(ev)
+    return events
+
+
+class TestGeminiStreaming:
+    @pytest.mark.asyncio
+    async def test_text_stream_yields_deltas_and_end_turn(self):
+        from google.genai import types
+
+        from backend.providers.gemini_provider import GeminiProvider
+
+        client = FakeGeminiClient([
+            _gemini_chunk(text="Hello"),
+            _gemini_chunk(text=" there."),
+        ])
+        provider = GeminiProvider(client=client)
+        messages = []
+
+        events = await _drain_gemini(provider, messages)
+
+        deltas = [e["text"] for e in events if e["type"] == "text_delta"]
+        assert deltas == ["Hello", " there."]
+        assert events[-1] == {"type": "message_done", "stop_reason": "end_turn"}
+
+        # Message-mutation contract: the assistant turn was appended.
+        assert len(messages) == 1
+        assert isinstance(messages[0], types.Content)
+        assert messages[0].role == "model"
+        assert messages[0].parts[0].text == "Hello there."
+
+    @pytest.mark.asyncio
+    async def test_function_call_turn_pairs_and_falls_back_to_synthetic_id(self):
+        from backend.providers.gemini_provider import GeminiProvider
+
+        client = FakeGeminiClient([
+            _gemini_chunk(parts=[
+                _gemini_fc_part(name="search_kb", args={"query": "boss weakness"}),
+            ]),
+        ])
+        provider = GeminiProvider(client=client)
+        messages = []
+
+        # Iterate manually so we can assert the assistant turn is already in
+        # messages when tool_use_complete fires (the base.py contract — the next
+        # append_tool_results call must produce a valid message log).
+        events = []
+        async for ev in provider.stream(
+            model="gemini-2.5-flash", messages=messages, system="sys",
+            tools=[], max_tokens=1024,
+        ):
+            if ev["type"] == "tool_use_complete":
+                assert len(messages) == 1 and messages[0].role == "model"
+            events.append(ev)
+
+        starts = [e for e in events if e["type"] == "tool_use_start"]
+        assert [e["name"] for e in starts] == ["search_kb"]
+
+        completes = [e for e in events if e["type"] == "tool_use_complete"]
+        assert len(completes) == 1
+        assert completes[0]["name"] == "search_kb"
+        assert completes[0]["arguments"] == {"query": "boss weakness"}
+        # fc.id is None → synthetic fallback id.
+        assert completes[0]["tool_use_id"] == "gemini_call_0"
+
+        assert events[-1] == {"type": "message_done", "stop_reason": "tool_use"}
+
+    @pytest.mark.asyncio
+    async def test_tool_use_start_deduped_per_name(self):
+        from backend.providers.gemini_provider import GeminiProvider
+
+        client = FakeGeminiClient([
+            _gemini_chunk(parts=[
+                _gemini_fc_part(id_="fc_1", name="search_kb", args={"query": "a"}),
+                _gemini_fc_part(id_="fc_2", name="search_kb", args={"query": "b"}),
+            ]),
+        ])
+        provider = GeminiProvider(client=client)
+
+        events = await _drain_gemini(provider, [])
+
+        starts = [e for e in events if e["type"] == "tool_use_start"]
+        assert len(starts) == 1
+        completes = [e for e in events if e["type"] == "tool_use_complete"]
+        assert [c["tool_use_id"] for c in completes] == ["fc_1", "fc_2"]
+
+    @pytest.mark.asyncio
+    async def test_append_tool_results_pairs_function_responses(self):
+        from google.genai import types
+
+        from backend.providers.gemini_provider import GeminiProvider
+        from backend.tools.results import ToolResult
+
+        provider = GeminiProvider(client=FakeGeminiClient([]))
+        messages = []
+        provider.append_tool_results(
+            messages,
+            [ToolResult(tool_use_id="fc_1", name="search_kb", content='{"hits": []}')],
+        )
+
+        assert len(messages) == 1
+        assert isinstance(messages[0], types.Content)
+        assert messages[0].role == "user"
+        fr = messages[0].parts[0].function_response
+        assert fr.id == "fc_1"
+        assert fr.name == "search_kb"
+        assert fr.response == {"hits": []}
+
+    @pytest.mark.asyncio
+    async def test_usage_maps_thinking_and_cache_fields(self):
+        from backend.providers.gemini_provider import GeminiProvider
+
+        client = FakeGeminiClient([
+            _gemini_chunk(
+                text="ok",
+                usage=SimpleNamespace(
+                    prompt_token_count=100,
+                    candidates_token_count=20,
+                    thoughts_token_count=7,
+                    cached_content_token_count=30,
+                ),
+            ),
+        ])
+        provider = GeminiProvider(client=client)
+
+        events = await _drain_gemini(provider, [])
+
+        usages = [e for e in events if e["type"] == "usage"]
+        assert len(usages) == 1
+        assert usages[0]["usage"] == {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "reasoning_tokens": 7,
+            "cache_read_input_tokens": 30,
+            "cache_creation_input_tokens": 0,
+        }

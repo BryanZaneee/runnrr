@@ -5,6 +5,7 @@ LLMProvider so the same loop covers Anthropic + OpenAI/Moonshot.
 """
 from __future__ import annotations
 
+import logging
 from typing import AsyncIterator
 
 from backend.config import MAX_TOKENS, MAX_TOOL_HOPS
@@ -12,6 +13,8 @@ from backend.profiles import AgentProfile, load_profile
 from backend.providers.base import LLMProvider
 from backend.tools import run_tool
 from backend.types import SessionDict
+
+log = logging.getLogger("easyagent.agent")
 
 
 async def run_conversation_stream(
@@ -39,32 +42,53 @@ async def run_conversation_stream(
         pending_usage: dict | None = None
         had_thinking = False
 
-        async for ev in provider.stream(
-            model=model,
-            messages=session["messages"],
-            system=provider.system_for_provider(profile),
-            tools=provider.tools_for_provider(profile),
-            max_tokens=MAX_TOKENS,
-        ):
-            t = ev.get("type")
-            if t == "text_delta":
-                yield {"event": "delta", "text": ev["text"]}
-            elif t == "thinking_delta":
-                had_thinking = True
-                yield {"event": "thinking_delta", "text": ev["text"]}
-            elif t == "tool_use_start":
-                yield {"event": "tool_use_start", "name": ev["name"]}
-            elif t == "tool_use_complete":
-                tool_calls_pending.append(ev)
-            elif t == "usage":
-                # Buffer usage and emit once we know the turn outcome — providers
-                # yield usage before message_done, so we can't classify in-flight.
-                pending_usage = ev["usage"]
-            elif t == "message_done":
-                stop_reason = ev.get("stop_reason") or "end_turn"
-            elif t == "error":
-                yield {"event": "error", "message": ev.get("text", "provider error")}
-                return
+        try:
+            async for ev in provider.stream(
+                model=model,
+                messages=session["messages"],
+                system=provider.system_for_provider(profile),
+                tools=provider.tools_for_provider(profile),
+                max_tokens=MAX_TOKENS,
+            ):
+                t = ev.get("type")
+                if t == "text_delta":
+                    yield {"event": "delta", "text": ev["text"]}
+                elif t == "thinking_delta":
+                    had_thinking = True
+                    yield {"event": "thinking_delta", "text": ev["text"]}
+                elif t == "tool_use_start":
+                    yield {"event": "tool_use_start", "name": ev["name"]}
+                elif t == "tool_use_complete":
+                    tool_calls_pending.append(ev)
+                elif t == "usage":
+                    # Buffer usage and emit once we know the turn outcome — providers
+                    # yield usage before message_done, so we can't classify in-flight.
+                    pending_usage = ev["usage"]
+                elif t == "message_done":
+                    stop_reason = ev.get("stop_reason") or "end_turn"
+                elif t == "error":
+                    yield {"event": "error", "message": ev.get("text", "provider error")}
+                    return
+        except Exception:
+            # SDK/network failures (auth, timeout, disconnect) become one sanitized
+            # error event instead of an exception escaping the SSE stream. Accepted
+            # edge: the session may end with a trailing user message and no
+            # assistant turn — all three provider APIs tolerate that on the next
+            # request.
+            log.exception(
+                "provider stream failed", extra={"model": model, "hop": hop}
+            )
+            if pending_usage is not None:
+                # Tokens already consumed still count against the daily budget.
+                yield {
+                    "event": "usage",
+                    "category": "tools" if tool_calls_pending else "response",
+                    "hop": hop,
+                    "had_thinking": had_thinking,
+                    **pending_usage,
+                }
+            yield {"event": "error", "message": "model provider error; please retry"}
+            return
 
         if pending_usage is not None:
             # Categorize by what the hop produced, not by whether thinking happened —

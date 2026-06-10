@@ -459,6 +459,47 @@ class TestOneToolHop:
         assert payload[0]["path"] == "projects/alpha.md"
 
 
+class TestProviderFailure:
+    """An exception out of provider.stream() becomes one sanitized error event."""
+
+    @pytest.mark.asyncio
+    async def test_stream_exception_yields_generic_error(self, kb_root):
+        class ExplodingProvider(FakeProvider):
+            async def stream(self, **kwargs: Any) -> AsyncIterator[Event]:
+                yield {"type": "text_delta", "text": "partial"}
+                yield {
+                    "type": "usage",
+                    "usage": {"input_tokens": 40, "output_tokens": 7,
+                              "cache_read_input_tokens": 0,
+                              "cache_creation_input_tokens": 0},
+                }
+                raise RuntimeError("secret upstream detail")
+
+        provider = ExplodingProvider([])
+        events = await collect(
+            run_conversation_stream(
+                "hi",
+                {"messages": []},
+                provider,
+                model="claude-sonnet-4-5",
+                profile=make_test_profile(kb_root),
+            )
+        )
+
+        # The partial delta still streamed, then a generic error — no raw
+        # exception text reaches the client and nothing propagates.
+        assert events[0] == {"event": "delta", "text": "partial"}
+        assert events[-1] == {"event": "error", "message": "model provider error; please retry"}
+        assert "secret" not in json.dumps(events)
+
+        # Usage consumed before the failure is still emitted for budget tracking.
+        usages = [e for e in events if e["event"] == "usage"]
+        assert len(usages) == 1 and usages[0]["output_tokens"] == 7
+
+        # No done event — the turn failed.
+        assert not any(e["event"] == "done" for e in events)
+
+
 class TestUsageCategorization:
     """Per-turn usage events carry a category derived from observed provider events."""
 

@@ -1,6 +1,8 @@
 """FastAPI app endpoints for chat SSE, health, models, profile, and budget.
 
 Sessions live in-memory; stale ones are swept lazily at the top of each chat request.
+This pins deployment to a single uvicorn worker — multi-worker needs external
+session storage.
 Provider lookup goes through `get_provider()` so tests can monkeypatch it.
 
 Abuse protection: per-IP slowapi rate limit on /api/chat, daily token budget enforced

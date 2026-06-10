@@ -61,7 +61,7 @@ async def run_conversation_stream(
                 # yield usage before message_done, so we can't classify in-flight.
                 pending_usage = ev["usage"]
             elif t == "message_done":
-                stop_reason = ev["stop_reason"]
+                stop_reason = ev.get("stop_reason") or "end_turn"
             elif t == "error":
                 yield {"event": "error", "message": ev.get("text", "provider error")}
                 return

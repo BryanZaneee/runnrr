@@ -215,6 +215,32 @@ class TestSingleTurnNoTools:
         assert session["messages"][1]["role"] == "assistant"
         assert provider.tool_results_received == []
 
+    @pytest.mark.asyncio
+    async def test_message_done_without_stop_reason_ends_turn(self, kb_root):
+        # A provider that omits stop_reason (or sends None) must not crash the
+        # loop or spin it — the hop is treated as end_turn.
+        provider = FakeProvider(
+            [
+                [
+                    {"type": "text_delta", "text": "Hello."},
+                    {"type": "message_done"},
+                ]
+            ]
+        )
+        events = await collect(
+            run_conversation_stream(
+                "hi",
+                {"messages": []},
+                provider,
+                model="claude-sonnet-4-5",
+                profile=make_test_profile(kb_root),
+            )
+        )
+
+        assert provider.turn_index == 1
+        done = [e for e in events if e["event"] == "done"]
+        assert len(done) == 1 and done[0]["stop_reason"] == "end_turn"
+
 
 class TestOneToolHop:
     """Provider asks for a tool, loop runs it (against the real fixture KB), provider answers."""

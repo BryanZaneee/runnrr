@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EasyAgent — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css?v=1" />
+  <link rel="stylesheet" href="app.css?v=1" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark">EA</span>
+        <div>
+          <h1>EasyAgent</h1>
+          <p class="brand-sub">SaaS dashboard</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span id="user-email" class="load-meta"></span>
+        <button type="button" id="sign-out" class="btn">Sign out</button>
+        <label class="api-field">
+          <span>API</span>
+          <input id="api-base" type="url" spellcheck="false" />
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <p id="load-error" class="banner banner-error hidden" role="alert"></p>
+
+    <section class="panel" aria-labelledby="agents-heading">
+      <div class="panel-head">
+        <h2 id="agents-heading">My Agents</h2>
+      </div>
+      <div class="new-agent-form">
+        <label>
+          Template
+          <select id="template-select" aria-label="Template"></select>
+        </label>
+        <label>
+          Name (optional)
+          <input id="agent-label" type="text" placeholder="Label" />
+        </label>
+        <button type="button" id="create-agent" class="btn">Create</button>
+      </div>
+      <div class="table-wrap">
+        <table id="agents-table">
+          <thead>
+            <tr>
+              <th>Label</th>
+              <th>Slug</th>
+              <th>Tools</th>
+              <th>Template</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="usage-heading">
+      <div class="panel-head">
+        <h2 id="usage-heading">Usage</h2>
+        <label class="profile-picker">
+          <span>Range</span>
+          <select id="usage-range" aria-label="Usage range">
+            <option value="24h">24h</option>
+            <option value="7d" selected>7d</option>
+            <option value="30d">30d</option>
+          </select>
+        </label>
+      </div>
+      <div id="usage-stats" class="stat-grid"></div>
+      <div id="usage-bars" class="usage-bars"></div>
+      <div class="table-wrap">
+        <table id="usage-models-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Tokens</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="dashboard.js"></script>
+</body>
+</html>

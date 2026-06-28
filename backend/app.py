@@ -188,6 +188,14 @@ async def health() -> dict:
     return {"status": "ok", "sessions": len(SESSIONS)}
 
 
+@app.get("/api/public-config")
+async def public_config() -> dict:
+    return {
+        "supabase_url": config.SUPABASE_URL,
+        "supabase_anon_key": config.SUPABASE_ANON_KEY,
+    }
+
+
 @app.get("/api/budget")
 async def budget() -> dict:
     return TOKEN_BUDGET.stats()

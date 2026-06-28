@@ -58,6 +58,11 @@ ALLOWED_ORIGINS: list[str] = [
     o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()
 ]
 
+SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "")
+SUPABASE_JWT_SECRET: str = os.environ.get("SUPABASE_JWT_SECRET", "")
+SUPABASE_DB_URL: str = os.environ.get("SUPABASE_DB_URL", "")
+SUPABASE_ANON_KEY: str = os.environ.get("SUPABASE_ANON_KEY", "")
+
 # model_id -> {provider, model, label, [base_url], [api_key_env]}
 # `model_id` is the public identifier sent by the frontend; `model` is what each provider's API expects.
 MODEL_REGISTRY: dict[str, ModelConfig] = {

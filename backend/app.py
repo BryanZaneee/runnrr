@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from typing import AsyncIterator
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -25,8 +27,9 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend import config
+from backend import agents_store, config, db, templates, usage_store
 from backend.agent import run_conversation_stream
+from backend.auth import CurrentUser, optional_user, require_user
 from backend.budget import TOKEN_BUDGET
 from backend.config import (
     ALLOWED_ORIGINS,
@@ -118,8 +121,10 @@ def warn_stale_indexes() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    await db.init_pool()
     warn_stale_indexes()
     yield
+    await db.close_pool()
 
 
 app = FastAPI(title="EasyAgent", version="0.1.0", lifespan=lifespan)
@@ -134,7 +139,7 @@ if ALLOWED_ORIGINS:
         allow_origins=ALLOWED_ORIGINS,
         allow_credentials=False,
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "Authorization"],
     )
 else:
     app.add_middleware(
@@ -142,7 +147,7 @@ else:
         allow_origin_regex=r"^http://(localhost|127\.0\.0\.1|\[::1\]):\d+$",
         allow_credentials=False,
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "Authorization"],
     )
 
 
@@ -151,6 +156,31 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     model: str = Field(..., min_length=1)
     profile: str = Field(default=DEFAULT_PROFILE, min_length=1, max_length=64)
+    agent_id: str | None = None
+
+
+class CreateAgentRequest(BaseModel):
+    template_id: str = Field(..., min_length=1)
+    label: str | None = None
+    slug: str | None = None
+
+
+class UpdateAgentRequest(BaseModel):
+    label: str | None = None
+    slug: str | None = None
+    config: dict | None = None
+
+
+def _parse_usage_range(range_str: str) -> timedelta:
+    m = re.fullmatch(r"(\d+)([dhm])", range_str.strip())
+    if not m:
+        return timedelta(days=7)
+    n, unit = int(m.group(1)), m.group(2)
+    if unit == "d":
+        return timedelta(days=n)
+    if unit == "h":
+        return timedelta(hours=n)
+    return timedelta(minutes=n)
 
 
 @app.get("/api/health")
@@ -266,9 +296,99 @@ async def list_profiles() -> dict:
     return {"default": DEFAULT_PROFILE, "profiles": out}
 
 
+@app.get("/api/me")
+async def me(user: CurrentUser = Depends(require_user)) -> dict:
+    return {"id": user.id, "email": user.email}
+
+
+@app.get("/api/templates")
+async def list_templates_endpoint(user: CurrentUser = Depends(require_user)) -> dict:
+    return {"templates": templates.list_templates()}
+
+
+@app.get("/api/agents")
+async def list_agents_endpoint(user: CurrentUser = Depends(require_user)) -> dict:
+    return {"agents": await agents_store.list_agents(user.id)}
+
+
+@app.post("/api/agents")
+async def create_agent_endpoint(
+    req: CreateAgentRequest,
+    user: CurrentUser = Depends(require_user),
+) -> dict:
+    try:
+        agent = await agents_store.create_agent_from_template(
+            user.id,
+            req.template_id,
+            label=req.label,
+            slug=req.slug,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=f"template not found: {req.template_id}") from exc
+    return agent
+
+
+@app.get("/api/agents/{agent_id}")
+async def get_agent_endpoint(
+    agent_id: str,
+    user: CurrentUser = Depends(require_user),
+) -> dict:
+    agent = await agents_store.get_agent(user.id, agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="agent not found")
+    return agent
+
+
+@app.patch("/api/agents/{agent_id}")
+async def update_agent_endpoint(
+    agent_id: str,
+    req: UpdateAgentRequest,
+    user: CurrentUser = Depends(require_user),
+) -> dict:
+    agent = await agents_store.update_agent(
+        user.id,
+        agent_id,
+        config=req.config,
+        label=req.label,
+        slug=req.slug,
+    )
+    if agent is None:
+        raise HTTPException(status_code=404, detail="agent not found")
+    try:
+        agents_store.agent_row_to_profile(agent)
+    except ProfileConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return agent
+
+
+@app.delete("/api/agents/{agent_id}")
+async def delete_agent_endpoint(
+    agent_id: str,
+    user: CurrentUser = Depends(require_user),
+) -> dict:
+    deleted = await agents_store.delete_agent(user.id, agent_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="agent not found")
+    return {"deleted": True}
+
+
+@app.get("/api/usage")
+async def usage_endpoint(
+    user: CurrentUser = Depends(require_user),
+    range: str = "7d",
+    agent_id: str | None = None,
+) -> dict:
+    since = datetime.now(timezone.utc) - _parse_usage_range(range)
+    return await usage_store.usage_summary(user.id, since=since, agent_id=agent_id)
+
+
 @app.post("/api/chat")
 @limiter.limit(RATE_LIMIT_CHAT)
-async def chat(request: Request, req: ChatRequest) -> StreamingResponse:
+async def chat(
+    request: Request,
+    req: ChatRequest,
+    user: CurrentUser | None = Depends(optional_user),
+) -> StreamingResponse:
     if req.model not in MODEL_REGISTRY:
         raise HTTPException(status_code=400, detail=f"unknown model: {req.model}")
     if MODEL_REGISTRY[req.model]["provider"] not in REGISTERED_PROVIDERS:
@@ -281,15 +401,27 @@ async def chat(request: Request, req: ChatRequest) -> StreamingResponse:
 
     _cleanup_stale_sessions()
 
-    if req.session_id not in SESSIONS and len(SESSIONS) >= MAX_ACTIVE_SESSIONS:
+    session_key = f"{user.id}:{req.session_id}" if user else req.session_id
+
+    if session_key not in SESSIONS and len(SESSIONS) >= MAX_ACTIVE_SESSIONS:
         raise HTTPException(status_code=503, detail="server at session capacity")
 
     provider = get_provider(req.model)
     cfg = MODEL_REGISTRY[req.model]
-    profile = get_profile(req.profile)
+
+    if user is not None and req.agent_id:
+        row = await agents_store.get_agent(user.id, req.agent_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="agent not found")
+        try:
+            profile = agents_store.agent_row_to_profile(row)
+        except ProfileConfigError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    else:
+        profile = get_profile(req.profile)
 
     session = SESSIONS.setdefault(
-        req.session_id,
+        session_key,
         {
             "messages": [],
             "last_seen": time.time(),
@@ -313,6 +445,8 @@ async def chat(request: Request, req: ChatRequest) -> StreamingResponse:
         session_id=req.session_id,
         model_id=req.model,
         profile_id=profile.id,
+        owner_id=user.id if user else None,
+        agent_id=req.agent_id,
     )
 
     return StreamingResponse(
@@ -329,6 +463,8 @@ async def _instrument(
     session_id: str,
     model_id: str,
     profile_id: str,
+    owner_id: str | None = None,
+    agent_id: str | None = None,
 ) -> AsyncIterator[dict]:
     """Pass events through; tally usage for the budget and emit one structured log."""
     started = time.time()
@@ -354,6 +490,7 @@ async def _instrument(
         raise
     finally:
         total = tokens_in + tokens_out
+        duration_ms = int((time.time() - started) * 1000)
         TOKEN_BUDGET.record(total)
         log.info(
             "chat_complete",
@@ -367,10 +504,26 @@ async def _instrument(
                 "tokens_total": total,
                 "cache_read": cache_read,
                 "tool_hops": tool_hops,
-                "duration_ms": int((time.time() - started) * 1000),
+                "duration_ms": duration_ms,
                 "status": status,
             },
         )
+        if owner_id is not None:
+            try:
+                await usage_store.record_usage(
+                    owner_id=owner_id,
+                    agent_id=agent_id,
+                    session_id=session_id,
+                    model=model_id,
+                    tokens_in=tokens_in,
+                    tokens_out=tokens_out,
+                    cache_read=cache_read,
+                    tool_hops=tool_hops,
+                    duration_ms=duration_ms,
+                    status=status,
+                )
+            except Exception:
+                log.warning("usage_record_failed", exc_info=True)
 
 
 async def _sse_format(events: AsyncIterator[dict]) -> AsyncIterator[bytes]:

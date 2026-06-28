@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from backend.profiles import ProfileConfigError, build_kb_manifest, load_profile
+from backend.profiles import (
+    ProfileConfigError,
+    build_kb_manifest,
+    load_profile,
+    profile_from_config,
+)
 from backend.providers.gemini_provider import GeminiProvider
 from backend.providers.openai_compat_provider import OpenAICompatProvider
 from backend.tools import SCHEMAS, run_tool
@@ -17,6 +23,49 @@ class DummyClient:
 
 async def collect(gen):
     return [ev async for ev in gen]
+
+
+def test_profile_from_config_builds_profile_from_dict(tmp_path):
+    # The DB-backed path (a per-tenant agent row) feeds a parsed config dict +
+    # resolved paths through the same constructor the filesystem loader uses.
+    cfg = {
+        "id": "tenant-agent",
+        "label": "Tenant Agent",
+        "description": "cloned",
+        "welcome": "hi",
+        "suggestions": ["a", "b"],
+        "tools": ["search_kb", "read_file"],
+        "tool_descriptions": {"search_kb": "find stuff"},
+        "brand": {"accent": "#123456"},
+        "source_path_labels": [["kb/a/", "A"], ["bad-pair"]],
+    }
+    p = profile_from_config(
+        cfg,
+        system_prompt="SYSTEM",
+        kb_root=tmp_path,
+        data_root=None,
+        profile_id="tenant-agent",
+    )
+    assert p.id == "tenant-agent"
+    assert p.label == "Tenant Agent"
+    assert p.system_prompt == "SYSTEM"
+    assert p.kb_root == tmp_path
+    assert p.tools == ("search_kb", "read_file")
+    assert p.tool_descriptions["search_kb"] == "find stuff"
+    assert p.brand["accent"] == "#123456"
+    # malformed (non-pair) entries are dropped, valid ones kept
+    assert p.source_path_labels == (("kb/a/", "A"),)
+
+
+def test_profile_from_config_rejects_unknown_tool(tmp_path):
+    with pytest.raises(ProfileConfigError):
+        profile_from_config(
+            {"tools": ["definitely_not_a_tool"]},
+            system_prompt="",
+            kb_root=tmp_path,
+            data_root=None,
+            profile_id="x",
+        )
 
 
 def test_personal_agent_profile_loads_persona_and_kb_root():

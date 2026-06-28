@@ -184,6 +184,55 @@ def _validate_tool_names(tools: tuple[str, ...], *, profile_id: str) -> None:
         )
 
 
+def profile_from_config(
+    cfg: dict[str, Any],
+    *,
+    system_prompt: str,
+    kb_root: Path,
+    data_root: Path | None,
+    profile_id: str,
+) -> AgentProfile:
+    """Build an AgentProfile from a parsed config dict plus already-resolved paths.
+
+    Shared by the filesystem loader (load_profile) and any other source that holds
+    the same shape as profile.json — e.g. a per-tenant DB row whose `config` jsonb
+    stores the profile. Path/system-prompt resolution differs by source, so callers
+    pass `system_prompt`, `kb_root`, and `data_root` already resolved; everything
+    else (tools, brand, source labels, mcp) is derived here so both paths stay in
+    sync and tool names are validated the same way.
+    """
+    tools = tuple(cfg.get("tools", DEFAULT_PROFILE_TOOLS))
+    _validate_tool_names(tools, profile_id=profile_id)
+
+    return AgentProfile(
+        id=cfg.get("id", profile_id),
+        label=cfg.get("label", profile_id.title()),
+        description=cfg.get("description", ""),
+        kb_root=kb_root,
+        system_prompt=system_prompt,
+        welcome=cfg.get("welcome", ""),
+        suggestions=tuple(cfg.get("suggestions", ())),
+        tools=tools,
+        tool_descriptions=dict(cfg.get("tool_descriptions", {})),
+        brand=_brand_metadata(cfg.get("brand", {})),
+        data_root=data_root,
+        mcp_servers=tuple(cfg.get("mcp_servers", ())),
+        project_aliases={
+            str(k).lower(): str(v)
+            for k, v in dict(cfg.get("project_aliases", {})).items()
+        },
+        source_labels={
+            str(k).lower(): str(v)
+            for k, v in dict(cfg.get("source_labels", {})).items()
+        },
+        source_path_labels=tuple(
+            (str(pair[0]), str(pair[1]))
+            for pair in cfg.get("source_path_labels", [])
+            if isinstance(pair, (list, tuple)) and len(pair) == 2
+        ),
+    )
+
+
 def load_profile(
     profile_id: str | None = None,
     *,
@@ -212,33 +261,10 @@ def load_profile(
         else None
     )
 
-    tools = tuple(cfg.get("tools", DEFAULT_PROFILE_TOOLS))
-    _validate_tool_names(tools, profile_id=pid)
-
-    return AgentProfile(
-        id=cfg.get("id", pid),
-        label=cfg.get("label", pid.title()),
-        description=cfg.get("description", ""),
-        kb_root=kb_root,
+    return profile_from_config(
+        cfg,
         system_prompt=system_prompt,
-        welcome=cfg.get("welcome", ""),
-        suggestions=tuple(cfg.get("suggestions", ())),
-        tools=tools,
-        tool_descriptions=dict(cfg.get("tool_descriptions", {})),
-        brand=_brand_metadata(cfg.get("brand", {})),
+        kb_root=kb_root,
         data_root=data_root,
-        mcp_servers=tuple(cfg.get("mcp_servers", ())),
-        project_aliases={
-            str(k).lower(): str(v)
-            for k, v in dict(cfg.get("project_aliases", {})).items()
-        },
-        source_labels={
-            str(k).lower(): str(v)
-            for k, v in dict(cfg.get("source_labels", {})).items()
-        },
-        source_path_labels=tuple(
-            (str(pair[0]), str(pair[1]))
-            for pair in cfg.get("source_path_labels", [])
-            if isinstance(pair, (list, tuple)) and len(pair) == 2
-        ),
+        profile_id=pid,
     )

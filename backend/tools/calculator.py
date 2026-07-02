@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from backend.tool_errors import ToolExecutionError
-from backend.tools.definitions import ToolContext, ToolDef
+from backend.tools.definitions import ToolDef
 from backend.tools.source_metadata import static_source_metadata
 
 
@@ -62,22 +62,6 @@ def calculator(operation: str, values: list[int | float]) -> dict[str, Any]:
     }
 
 
-def _handle_calculator(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return calculator(arguments["operation"], arguments["values"])
-
-
-def _calculator_metadata(
-    arguments: dict[str, Any],
-    out: Any,
-    context: ToolContext | None = None,
-) -> dict[str, Any]:
-    return static_source_metadata(
-        "calculated result",
-        label="Calculation",
-        kind="calculation",
-    )
-
-
 CALCULATOR_TOOL = ToolDef(
     name="calculator",
     description=(
@@ -101,6 +85,8 @@ CALCULATOR_TOOL = ToolDef(
         },
         "required": ["operation", "values"],
     },
-    handler=_handle_calculator,
-    source_metadata=_calculator_metadata,
+    handler=lambda args, ctx: calculator(args["operation"], args["values"]),
+    source_metadata=lambda args, out, ctx: static_source_metadata(
+        "calculated result", label="Calculation", kind="calculation"
+    ),
 )

@@ -11,7 +11,7 @@ from backend.tool_errors import ToolExecutionError
 
 if TYPE_CHECKING:
     from backend.rag.embeddings import EmbeddingProvider
-    from backend.tools.definitions import ToolContext, ToolDef
+    from backend.tools.definitions import ToolDef
 
 SNIPPET_CHARS = 400
 
@@ -76,14 +76,6 @@ def _snippet(content: str) -> str:
     return text[: SNIPPET_CHARS - 3].rstrip() + "..."
 
 
-def _handle_semantic_search_kb(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return semantic_search_kb(
-        arguments["query"],
-        k=arguments.get("k", 5),
-        profile=ctx.profile,
-    )
-
-
 def build_semantic_search_tool() -> "ToolDef":
     """Construct the ``semantic_search_kb`` ToolDef.
 
@@ -118,6 +110,10 @@ def build_semantic_search_tool() -> "ToolDef":
             },
             "required": ["query"],
         },
-        handler=_handle_semantic_search_kb,
+        handler=lambda args, ctx: semantic_search_kb(
+            args["query"],
+            k=args.get("k", 5),
+            profile=ctx.profile,
+        ),
         source_metadata=semantic_search_metadata,
     )

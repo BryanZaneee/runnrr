@@ -1,21 +1,9 @@
 """Public web-search native tool definition."""
 from __future__ import annotations
 
-from typing import Any
-
-from backend.tools.definitions import ToolContext, ToolDef
+from backend.tools.definitions import ToolDef
 from backend.tools.source_metadata import web_search_metadata
 from backend.web_search import web_search
-
-
-def _handle_web_search(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return web_search(
-        arguments["query"],
-        max_results=arguments.get("max_results", 5),
-        search_depth=arguments.get("search_depth", "basic"),
-        include_answer=arguments.get("include_answer", True),
-    )
-
 
 WEB_SEARCH_TOOL = ToolDef(
     name="web_search",
@@ -54,6 +42,11 @@ WEB_SEARCH_TOOL = ToolDef(
         },
         "required": ["query"],
     },
-    handler=_handle_web_search,
+    handler=lambda args, ctx: web_search(
+        args["query"],
+        max_results=args.get("max_results", 5),
+        search_depth=args.get("search_depth", "basic"),
+        include_answer=args.get("include_answer", True),
+    ),
     source_metadata=web_search_metadata,
 )

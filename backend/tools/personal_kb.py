@@ -47,27 +47,6 @@ def get_project_context(
     return {"project": slug, "summary": loaded["content"]}
 
 
-def _handle_get_resume_summary(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return get_resume_summary(root=ctx.root)
-
-
-def _handle_get_project_context(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    aliases = ctx.profile.project_aliases if ctx.profile else {}
-    return get_project_context(
-        arguments["project_name"],
-        root=ctx.root,
-        aliases=aliases,
-    )
-
-
-def resume_metadata(
-    arguments: dict[str, Any],
-    out: Any,
-    context: ToolContext | None = None,
-) -> dict[str, Any]:
-    return static_source_metadata("read Resume", label="Resume", kind="kb_read")
-
-
 def project_context_metadata(
     arguments: dict[str, Any],
     out: Any,
@@ -87,8 +66,10 @@ PERSONAL_KB_TOOL_DEFS: tuple[ToolDef, ...] = (
             "qualifications when that profile includes resume data."
         ),
         input_schema={"type": "object", "properties": {}, "required": []},
-        handler=_handle_get_resume_summary,
-        source_metadata=resume_metadata,
+        handler=lambda args, ctx: get_resume_summary(root=ctx.root),
+        source_metadata=lambda args, out, ctx: static_source_metadata(
+            "read Resume", label="Resume", kind="kb_read"
+        ),
     ),
     ToolDef(
         name="get_project_context",
@@ -110,7 +91,11 @@ PERSONAL_KB_TOOL_DEFS: tuple[ToolDef, ...] = (
             },
             "required": ["project_name"],
         },
-        handler=_handle_get_project_context,
+        handler=lambda args, ctx: get_project_context(
+            args["project_name"],
+            root=ctx.root,
+            aliases=ctx.profile.project_aliases if ctx.profile else {},
+        ),
         source_metadata=project_context_metadata,
     ),
 )

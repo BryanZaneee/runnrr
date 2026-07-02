@@ -1,43 +1,17 @@
 """Knowledge-base native tool definitions."""
 from __future__ import annotations
 
-from typing import Any
-
 from backend.kb_loader import (
     list_kb,
     read_file,
     search_kb,
 )
-from backend.tools.definitions import ToolContext, ToolDef
+from backend.tools.definitions import ToolDef
 from backend.tools.source_metadata import (
     list_kb_metadata,
     read_file_metadata,
     search_kb_metadata,
 )
-
-
-def _handle_list_kb(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return list_kb(arguments.get("subdir", ""), root=ctx.root)
-
-
-def _handle_read_file(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return read_file(
-        arguments["path"],
-        arguments.get("start_line", 1),
-        arguments.get("end_line"),
-        root=ctx.root,
-    )
-
-
-def _handle_search_kb(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return search_kb(
-        arguments["query"],
-        regex=arguments.get("regex", False),
-        subdir=arguments.get("subdir", ""),
-        max_results=arguments.get("max_results", 20),
-        root=ctx.root,
-    )
-
 
 KB_TOOL_DEFS: tuple[ToolDef, ...] = (
     ToolDef(
@@ -62,7 +36,7 @@ KB_TOOL_DEFS: tuple[ToolDef, ...] = (
             },
             "required": [],
         },
-        handler=_handle_list_kb,
+        handler=lambda args, ctx: list_kb(args.get("subdir", ""), root=ctx.root),
         source_metadata=list_kb_metadata,
     ),
     ToolDef(
@@ -98,7 +72,12 @@ KB_TOOL_DEFS: tuple[ToolDef, ...] = (
             },
             "required": ["path"],
         },
-        handler=_handle_read_file,
+        handler=lambda args, ctx: read_file(
+            args["path"],
+            args.get("start_line", 1),
+            args.get("end_line"),
+            root=ctx.root,
+        ),
         source_metadata=read_file_metadata,
     ),
     ToolDef(
@@ -119,7 +98,13 @@ KB_TOOL_DEFS: tuple[ToolDef, ...] = (
             },
             "required": ["query"],
         },
-        handler=_handle_search_kb,
+        handler=lambda args, ctx: search_kb(
+            args["query"],
+            regex=args.get("regex", False),
+            subdir=args.get("subdir", ""),
+            max_results=args.get("max_results", 20),
+            root=ctx.root,
+        ),
         source_metadata=search_kb_metadata,
     ),
 )

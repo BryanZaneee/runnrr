@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.tool_errors import ToolExecutionError
-from backend.tools.definitions import ToolContext, ToolDef
+from backend.tools.definitions import ToolDef
 from backend.tools.source_metadata import catalog_lookup_metadata, static_source_metadata
 
 
@@ -245,81 +245,6 @@ def checkout_link_preview(
     }
 
 
-def _handle_catalog_lookup(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return catalog_lookup(
-        arguments["query"],
-        category=arguments.get("category", ""),
-        max_results=arguments.get("max_results", 5),
-        data_root=ctx.data_root,
-    )
-
-
-def _handle_qualify_lead(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return qualify_lead(
-        arguments["use_case"],
-        urgency=arguments.get("urgency", ""),
-        team_size=arguments.get("team_size", ""),
-        budget_range=arguments.get("budget_range", ""),
-        integrations=arguments.get("integrations", []),
-        data_root=ctx.data_root,
-    )
-
-
-def _handle_lead_capture_preview(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return lead_capture_preview(
-        name=arguments["name"],
-        email=arguments["email"],
-        company=arguments.get("company", ""),
-        use_case=arguments["use_case"],
-        notes=arguments.get("notes", ""),
-    )
-
-
-def _handle_checkout_link_preview(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return checkout_link_preview(
-        arguments["package_id"],
-        billing_cadence=arguments.get("billing_cadence", "one_time"),
-        quantity=arguments.get("quantity", 1),
-        data_root=ctx.data_root,
-    )
-
-
-def _qualify_lead_metadata(
-    arguments: dict[str, Any],
-    out: Any,
-    context: ToolContext | None = None,
-) -> dict[str, Any]:
-    return static_source_metadata(
-        "qualified lead",
-        label="Lead qualification rules",
-        kind="lead_qualification",
-    )
-
-
-def _lead_capture_preview_metadata(
-    arguments: dict[str, Any],
-    out: Any,
-    context: ToolContext | None = None,
-) -> dict[str, Any]:
-    return static_source_metadata(
-        "prepared lead capture preview",
-        label="Lead capture preview",
-        kind="lead_preview",
-    )
-
-
-def _checkout_link_preview_metadata(
-    arguments: dict[str, Any],
-    out: Any,
-    context: ToolContext | None = None,
-) -> dict[str, Any]:
-    return static_source_metadata(
-        "prepared checkout preview",
-        label="Checkout preview",
-        kind="checkout_preview",
-    )
-
-
 SALES_TOOL_DEFS: tuple[ToolDef, ...] = (
     ToolDef(
         name="catalog_lookup",
@@ -339,7 +264,12 @@ SALES_TOOL_DEFS: tuple[ToolDef, ...] = (
             },
             "required": ["query"],
         },
-        handler=_handle_catalog_lookup,
+        handler=lambda args, ctx: catalog_lookup(
+            args["query"],
+            category=args.get("category", ""),
+            max_results=args.get("max_results", 5),
+            data_root=ctx.data_root,
+        ),
         source_metadata=catalog_lookup_metadata,
     ),
     ToolDef(
@@ -360,8 +290,17 @@ SALES_TOOL_DEFS: tuple[ToolDef, ...] = (
             },
             "required": ["use_case"],
         },
-        handler=_handle_qualify_lead,
-        source_metadata=_qualify_lead_metadata,
+        handler=lambda args, ctx: qualify_lead(
+            args["use_case"],
+            urgency=args.get("urgency", ""),
+            team_size=args.get("team_size", ""),
+            budget_range=args.get("budget_range", ""),
+            integrations=args.get("integrations", []),
+            data_root=ctx.data_root,
+        ),
+        source_metadata=lambda args, out, ctx: static_source_metadata(
+            "qualified lead", label="Lead qualification rules", kind="lead_qualification"
+        ),
     ),
     ToolDef(
         name="lead_capture_preview",
@@ -380,8 +319,16 @@ SALES_TOOL_DEFS: tuple[ToolDef, ...] = (
             },
             "required": ["name", "email", "use_case"],
         },
-        handler=_handle_lead_capture_preview,
-        source_metadata=_lead_capture_preview_metadata,
+        handler=lambda args, ctx: lead_capture_preview(
+            name=args["name"],
+            email=args["email"],
+            company=args.get("company", ""),
+            use_case=args["use_case"],
+            notes=args.get("notes", ""),
+        ),
+        source_metadata=lambda args, out, ctx: static_source_metadata(
+            "prepared lead capture preview", label="Lead capture preview", kind="lead_preview"
+        ),
     ),
     ToolDef(
         name="checkout_link_preview",
@@ -402,7 +349,14 @@ SALES_TOOL_DEFS: tuple[ToolDef, ...] = (
             },
             "required": ["package_id"],
         },
-        handler=_handle_checkout_link_preview,
-        source_metadata=_checkout_link_preview_metadata,
+        handler=lambda args, ctx: checkout_link_preview(
+            args["package_id"],
+            billing_cadence=args.get("billing_cadence", "one_time"),
+            quantity=args.get("quantity", 1),
+            data_root=ctx.data_root,
+        ),
+        source_metadata=lambda args, out, ctx: static_source_metadata(
+            "prepared checkout preview", label="Checkout preview", kind="checkout_preview"
+        ),
     ),
 )

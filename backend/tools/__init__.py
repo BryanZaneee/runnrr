@@ -21,7 +21,7 @@ from backend.tools.schemas import (
     SCHEMAS_BY_NAME,
     schemas_for_tools,
 )
-from backend.tools.web_fetch import fetch_url_text, httpx, socket
+from backend.tools.web_fetch import fetch_url_text
 
 __all__ = [
     "DEFAULT_TOOL_NAMES",
@@ -39,10 +39,8 @@ __all__ = [
     "catalog_lookup",
     "checkout_link_preview",
     "fetch_url_text",
-    "httpx",
     "lead_capture_preview",
     "qualify_lead",
     "run_tool",
     "schemas_for_tools",
-    "socket",
 ]

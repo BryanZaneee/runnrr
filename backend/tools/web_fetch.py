@@ -11,7 +11,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from backend.tool_errors import ToolExecutionError
-from backend.tools.definitions import ToolContext, ToolDef
+from backend.tools.definitions import ToolDef
 from backend.tools.source_metadata import fetch_url_text_metadata
 
 FETCH_TIMEOUT_SECONDS = 10.0
@@ -151,13 +151,6 @@ def fetch_url_text(url: str, *, max_chars: int = FETCH_DEFAULT_CHARS) -> dict[st
     }
 
 
-def _handle_fetch_url_text(arguments: dict[str, Any], ctx: ToolContext) -> Any:
-    return fetch_url_text(
-        arguments["url"],
-        max_chars=arguments.get("max_chars", FETCH_DEFAULT_CHARS),
-    )
-
-
 FETCH_URL_TEXT_TOOL = ToolDef(
     name="fetch_url_text",
     description=(
@@ -183,6 +176,9 @@ FETCH_URL_TEXT_TOOL = ToolDef(
         },
         "required": ["url"],
     },
-    handler=_handle_fetch_url_text,
+    handler=lambda args, ctx: fetch_url_text(
+        args["url"],
+        max_chars=args.get("max_chars", FETCH_DEFAULT_CHARS),
+    ),
     source_metadata=fetch_url_text_metadata,
 )

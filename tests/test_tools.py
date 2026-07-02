@@ -464,15 +464,15 @@ class TestWebSearch:
 
 class TestFetchUrlText:
     def test_fetches_public_text_page(self, monkeypatch):
-        import backend.tools as tools
+        import backend.tools.web_fetch as wf
 
         monkeypatch.setattr(
-            tools.socket,
+            wf.socket,
             "getaddrinfo",
             lambda host, port: [(None, None, None, None, ("93.184.216.34", 0))],
         )
         monkeypatch.setattr(
-            tools.httpx,
+            wf.httpx,
             "get",
             lambda *args, **kwargs: _FetchResponse(
                 text="<html><head><title>Example Title</title></head><body><h1>Hello</h1><p>World</p></body></html>"
@@ -510,15 +510,15 @@ class TestFetchUrlText:
         assert result.is_error is True
 
     def test_rejects_non_text_content(self, monkeypatch):
-        import backend.tools as tools
+        import backend.tools.web_fetch as wf
 
         monkeypatch.setattr(
-            tools.socket,
+            wf.socket,
             "getaddrinfo",
             lambda host, port: [(None, None, None, None, ("93.184.216.34", 0))],
         )
         monkeypatch.setattr(
-            tools.httpx,
+            wf.httpx,
             "get",
             lambda *args, **kwargs: _FetchResponse(
                 text="not really an image",

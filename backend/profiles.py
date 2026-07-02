@@ -149,6 +149,9 @@ class AgentProfile:
     # Tried in declared order, first match wins, so list exact paths before
     # the prefixes they fall under. Case-sensitive (unlike source_labels).
     source_path_labels: tuple[tuple[str, str], ...] = ()
+    # True for visitor-created profiles written by the builder API. These are
+    # excluded from the public /api/profiles listing (unlisted, not secret).
+    builder: bool = False
 
 
 def _project_path(value: str | None, fallback: Path) -> Path:
@@ -241,4 +244,5 @@ def load_profile(
             for pair in cfg.get("source_path_labels", [])
             if isinstance(pair, (list, tuple)) and len(pair) == 2
         ),
+        builder=bool(cfg.get("builder", False)),
     )

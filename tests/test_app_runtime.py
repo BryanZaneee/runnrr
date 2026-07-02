@@ -382,9 +382,10 @@ class TestAbuseProtection:
         monkeypatch.setenv("RATE_LIMIT_ENABLED", "1")
 
         import importlib
-        from backend import config
+        from backend import config, ratelimit
 
         importlib.reload(config)
+        importlib.reload(ratelimit)  # limiter is built from RATE_LIMIT_* at import
         from backend import app as app_module
 
         importlib.reload(app_module)

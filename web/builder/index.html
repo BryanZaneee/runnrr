@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EasyAgent — Agent Builder</title>
+  <meta name="description" content="Create and configure your own AI agent, then try it right away." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css?v=1" />
+  <link rel="stylesheet" href="builder.css?v=1" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark">AB</span>
+        <div>
+          <h1>Agent Builder</h1>
+          <p class="brand-sub">Create your own assistant — no code needed</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <label class="api-field">
+          <span>Agent</span>
+          <select id="agent-select" aria-label="Select an agent to edit"></select>
+        </label>
+        <button type="button" id="new-agent-btn" class="btn btn-secondary">New agent</button>
+        <label class="api-field">
+          <span>API</span>
+          <input id="api-base" type="url" spellcheck="false" />
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <p id="load-error" class="banner banner-error hidden" role="alert"></p>
+
+    <section id="disabled-notice" class="panel disabled-notice hidden">
+      <h2>The Agent Builder is turned off</h2>
+      <p>Add <code>ENABLE_PROFILE_EDITOR=1</code> to your <code>.env</code> and restart the backend to turn it on.</p>
+    </section>
+
+    <div id="builder-body" class="builder-grid hidden">
+      <section class="panel editor-panel">
+        <div class="tab-row" role="tablist">
+          <button type="button" class="tab-btn is-active" id="tab-setup-btn" role="tab" aria-selected="true">Setup</button>
+          <button type="button" class="tab-btn" id="tab-kb-btn" role="tab" aria-selected="false">Knowledge</button>
+        </div>
+
+        <div id="tab-setup" class="tab-panel">
+          <div class="field">
+            <label for="f-name">Agent name</label>
+            <input id="f-name" type="text" placeholder="Coffee Helper" />
+            <p class="field-hint" id="slug-hint">Choose a name to see its saved id.</p>
+          </div>
+
+          <div class="field">
+            <label for="f-description">What does it do?</label>
+            <input id="f-description" type="text" placeholder="Answers questions about our menu and hours" />
+            <p class="field-hint">One line shown to visitors and in the agent list.</p>
+          </div>
+
+          <div class="field">
+            <label for="f-instructions">Instructions &amp; personality</label>
+            <textarea id="f-instructions" rows="8" placeholder="You are a friendly assistant for Easy Coffee. Answer only from your knowledge notes. Be warm and concise."></textarea>
+            <p class="field-hint">Tell it who it is, how to sound, and what it should (or shouldn't) talk about.</p>
+          </div>
+
+          <div class="field">
+            <label for="f-welcome">Greeting message</label>
+            <input id="f-welcome" type="text" placeholder="Hi! Ask me anything about our menu." />
+            <p class="field-hint">The first message visitors see.</p>
+          </div>
+
+          <div class="field">
+            <label for="f-suggestions">Suggested questions</label>
+            <textarea id="f-suggestions" rows="4" placeholder="What's on the menu?&#10;What are your hours?"></textarea>
+            <p class="field-hint">One question per line. Up to 8 shown as quick-start buttons.</p>
+          </div>
+
+          <div class="field">
+            <span class="field-label-static">Abilities</span>
+            <div id="abilities-list" class="abilities-list"></div>
+            <p class="field-hint">What your agent is allowed to do when it answers.</p>
+          </div>
+
+          <div class="field">
+            <label for="f-accent">Accent color</label>
+            <input id="f-accent" type="color" value="#386f3d" />
+            <p class="field-hint">Used for its chat bubbles and header.</p>
+          </div>
+
+          <div class="save-row">
+            <button type="button" id="save-btn" class="btn">Save agent</button>
+            <p id="save-status" class="save-status hidden"></p>
+          </div>
+        </div>
+
+        <div id="tab-kb" class="tab-panel hidden">
+          <div class="kb-layout">
+            <div class="kb-list-col">
+              <button type="button" id="new-note-btn" class="btn btn-secondary">New note</button>
+              <ul id="notes-list" class="notes-list"></ul>
+              <p id="kb-empty" class="field-hint hidden">Add notes your agent can read — menus, FAQs, policies, anything.</p>
+            </div>
+            <div class="kb-editor-col">
+              <p id="note-empty-state" class="field-hint">Select a note on the left, or create a new one.</p>
+              <div id="note-editor-wrap" class="hidden">
+                <p class="note-path" id="note-path-label"></p>
+                <textarea id="note-content" rows="16"></textarea>
+                <p class="field-hint">Plain text or markdown.</p>
+                <div class="save-row">
+                  <button type="button" id="save-note-btn" class="btn">Save note</button>
+                  <button type="button" id="delete-note-btn" class="btn btn-danger">Delete note</button>
+                  <p id="note-status" class="save-status hidden"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel chat-panel">
+        <div class="chat-head">
+          <h2>Try it</h2>
+          <button type="button" id="chat-reset-btn" class="btn btn-secondary">Start over</button>
+        </div>
+        <p id="chat-unsaved" class="field-hint hidden">Save your agent first, then try it here.</p>
+        <div id="chat-transcript" class="chat-transcript"></div>
+        <div class="chat-input-row">
+          <input id="chat-input" type="text" placeholder="Ask your agent something..." disabled />
+          <button type="button" id="chat-send-btn" class="btn" disabled>Send</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="builder.js?v=1" defer></script>
+</body>
+</html>

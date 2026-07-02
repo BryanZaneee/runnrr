@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-`AGENTS.md` is the same content for Codex; keep them in sync when changing standing rules.
+`AGENTS.md` is a symlink to this file, so Codex reads the same content — edit only here.
 
 ## Project Overview
 
@@ -32,10 +32,29 @@ Bundled profiles under `profiles/`:
 uv venv --python 3.13 && uv pip install -e ".[dev,rag]"
 cp .env.example .env  # set one or more provider keys locally; never commit secrets
 
-.venv/bin/python -m pytest -v                                     # tests
+.venv/bin/python -m pytest -v                                     # all tests
+.venv/bin/python -m pytest tests/test_tools.py -v                 # single file
+.venv/bin/python -m pytest -k "test_safe_resolve" -v              # single test by name
 .venv/bin/python -m uvicorn backend.app:app --reload --port 8001  # backend
 .venv/bin/python -m http.server 8000 --directory web              # frontend
 ```
+
+RAG index CLI (`backend/rag/cli.py`):
+```bash
+.venv/bin/python -m backend.rag.cli build personal-agent          # build index
+.venv/bin/python -m backend.rag.cli info personal-agent           # index stats
+.venv/bin/python -m backend.rag.cli query personal-agent --query "..." --k 5
+```
+
+Evals CLI (`backend/evals/cli.py`):
+```bash
+.venv/bin/python -m backend.evals.cli run --profile research-analyst --dataset rag --mode retrieval-only
+.venv/bin/python -m backend.evals.cli list --profile research-analyst
+.venv/bin/python -m backend.evals.cli compare --profile research-analyst --latest
+.venv/bin/python -m backend.evals.cli report --profile research-analyst --latest
+```
+
+Set `EASYAGENT_TOOL_DEBUG_ERRORS=1` in `.env` to surface full tracebacks from tool handlers (off by default in prod).
 
 ## Architecture (one-screen tour)
 
@@ -82,15 +101,16 @@ The agent loop normalizes provider events to: `text_delta`, `thinking_delta`, `t
 - [`backend/kb_loader.py`](backend/kb_loader.py) — `_safe_resolve()` is the trust boundary; everything else uses it
 - [`backend/web_search.py`](backend/web_search.py) — Tavily-backed `web_search()` helper used by the `web_search` tool. `TAVILY_API_KEY` required; raises `WebSearchError` otherwise.
 - [`backend/app.py`](backend/app.py) — FastAPI: POST `/api/chat` (SSE), GET `/api/models`, GET `/api/health`, GET `/api/budget`, GET `/api/profile`, GET `/api/profiles` (lists all bundled profiles for the agent switcher; logs and skips unloadable profiles), GET `/api/rag/index`, GET `/api/status`, and GET `/api/evals/*` (run history/detail/index-status; gated by `ENABLE_EVALS_API`). **`/api/profile` is intentionally cheap** — it does NOT embed RAG-index health (that scans/hashes the KB). RAG health is the canonical job of `GET /api/rag/index`.
-- [`backend/config.py`](backend/config.py) — env loading, `MODEL_REGISTRY`, limits, rate-limit + budget knobs, plus `PROVIDER_TIMEOUT_SECONDS`, RAG knobs (`EASYAGENT_EMBEDDING_BACKEND`, `EASYAGENT_RERANK` → `RERANK_ENABLED`), and eval knobs (`EASYAGENT_GRADER_MODEL` → `GRADER_MODEL_ID`, `ENABLE_EVALS_API`)
+- [`backend/config.py`](backend/config.py) — env loading, `MODEL_REGISTRY`, limits, rate-limit + budget knobs, plus `PROVIDER_TIMEOUT_SECONDS`, RAG knobs (`EASYAGENT_EMBEDDING_BACKEND`, `EASYAGENT_RERANK` → `RERANK_ENABLED`), eval knobs (`EASYAGENT_GRADER_MODEL` → `GRADER_MODEL_ID`, `ENABLE_EVALS_API`), and the builder gate `ENABLE_PROFILE_EDITOR`
+- [`backend/builder.py`](backend/builder.py) — Agent Builder write API, gated by `ENABLE_PROFILE_EDITOR` (default off). When enabled it is a **public** write surface (the bryanzane.com builder page) with its own guards: `X-Builder-Owner` token ownership (`owner_sha256` in profile.json; wrong token → 403), per-IP `RATE_LIMIT_BUILDER` on mutations, `MAX_BUILDER_PROFILES` global cap, `MAX_NOTES_PER_PROFILE`, a lazy `BUILDER_PROFILE_TTL_DAYS` sweep on create, and a server-side `BUILDER_ALLOWED_TOOLS` allowlist (no portfolio/RAG tools). Selecting catalog tools provisions a generic demo catalog into the profile's `data/`. `GET /api/tools` (ungated registry catalog) plus `/api/builder/*` profile upsert and per-profile KB-note CRUD. Only profiles written with `"builder": true` are editable — bundled profiles get 409; builder profiles are excluded from `GET /api/profiles` (unlisted, not secret). All KB paths go through `_safe_resolve`; all mutations are POST (CORS allows only GET/POST). Backs the local `web/builder/` page and the public `bryanzane_v3/easyagent/builder/` page.
+- [`backend/ratelimit.py`](backend/ratelimit.py) — the shared slowapi `limiter` (app.py and builder.py both import it; it can't live in app.py because app.py imports builder).
 - [`backend/budget.py`](backend/budget.py) — process-local `TOKEN_BUDGET` enforced before each chat and recorded after; resets on local-date change
 - [`backend/logging_config.py`](backend/logging_config.py) — `configure_logging()` installs a JSON-line stdout formatter; `extra={...}` fields merge into the record
-- `web/` — local **technical dashboard** (health, budget, limits, models, profiles, and per-profile RAG-index status). It is NOT the production chat UI — public chat lives in the separate `bryanzane_v3/easyagent/` app. The dashboard fetches RAG health from `GET /api/rag/index` (not from `/api/profile`).
+- `web/` — local **technical dashboard** (health, budget, limits, models, profiles, and per-profile RAG-index status). It is NOT the production chat UI — public chat lives in the separate `bryanzane_v3/easyagent/` app. The dashboard fetches RAG health from `GET /api/rag/index` (not from `/api/profile`). `web/builder/` is the local Agent Builder page (plain-language profile editor + knowledge notes + test chat; needs `ENABLE_PROFILE_EDITOR=1`).
 - `profiles/` — reusable agent profiles loaded by the engine. `personal-agent` is the bundled personal showcase (default); `customer-service` ships its own self-contained KB; `sales-concierge` and `bzs-concierge` ship a `data/catalog.json`; `research-analyst`, `sales-concierge`, and `bzs-concierge` also ship per-profile `evals/smoke.json`; `frampton` uses the tracked Fextralife scrape at `kb/frampton`.
-- `profiles-advanced/` — placeholder for tier-2 multi-channel/multi-tenant profiles (WhatsApp/IG/Gmail/GBP). Sibling of `profiles/` so the loader does not pick it up
 - `kb/` — local/private content such as resume files, project notes, and codebase XML dumps; ignored by git (only `kb/README.md` and `kb/frampton/` are tracked). The `frampton` Fextralife scrape is third-party but public, so it ships with the repo so deploys are self-contained.
 - [`tests/conftest.py`](tests/conftest.py) — autouse fixtures: `use_mini_kb` (points `KB_ROOT` at `tests/fixtures/mini_kb/`) and `reset_budget` (clears `TOKEN_BUDGET` between tests)
-- `tests/` — `test_tools.py` (KB + non-KB tool dispatch, including the `_safe_resolve` boundary), `test_agent_loop.py` (loop + provider stubs, provider-failure normalization), `test_providers.py` (OpenAI-compat + Gemini streaming/translation, SDK timeouts; Anthropic streaming tests remain a gap), `test_app.py` (endpoints, SSE, rate limit, budget), `test_app_runtime.py` (runtime status surface), `test_customer_service_profile.py` and `test_profiles_and_translators.py` (profile loading + tool-allowlist filtering), `test_evals_app.py` / `test_evals_graders.py` / `test_evals_runner.py` (eval API, graders, runner), and seven `test_rag_*.py` files (chunker, embeddings, foundation, indexer, reranker, retriever, tools)
+- `tests/` — `test_tools.py` (KB + non-KB tool dispatch, including the `_safe_resolve` boundary), `test_agent_loop.py` (loop + provider stubs, provider-failure normalization), `test_providers.py` (OpenAI-compat + Gemini streaming/translation, SDK timeouts; Anthropic streaming tests remain a gap), `test_app.py` (endpoints, SSE, rate limit, budget), `test_app_runtime.py` (runtime status surface), `test_customer_service_profile.py` and `test_profiles_and_translators.py` (profile loading + tool-allowlist filtering), `test_evals_app.py` / `test_evals_graders.py` / `test_evals_runner.py` (eval API, graders, runner), `test_builder_app.py` (builder gating, profile upsert, KB-note write boundary), and seven `test_rag_*.py` files (chunker, embeddings, foundation, indexer, reranker, retriever, tools)
 
 ## Conventions
 
@@ -130,7 +150,7 @@ The agent loop normalizes provider events to: `text_delta`, `thinking_delta`, `t
 - ⏳ **Phase E**: prompt caching / usage overlay across providers
 - ⏳ **Phase F**: populate a local/private `kb/` (resume, quick_info, project pitches, meta) + smoke prompts
 - ✅ **Phase G**: production hardening — per-IP `slowapi` rate limit on `/api/chat`, `TOKEN_BUDGET` daily cap with `/api/budget` introspection, `MAX_ACTIVE_SESSIONS` cap with lazy stale-session sweep, JSON-line structured logs via `_instrument()` per chat completion
-- ✅ **Customer-service profile + agent switcher**: bundled `profiles/customer-service/` (Lantern Lane Coffee) + sibling `profiles-advanced/` placeholder + `mcp_servers` schema field on `AgentProfile` (parsed; full MCP integration deferred) + `GET /api/profiles` endpoint + web UI agent switcher dropdown and details panel showing description, tools, MCP servers, and per-turn classified token usage
+- ✅ **Customer-service profile + agent switcher**: bundled `profiles/customer-service/` (Lantern Lane Coffee) + `mcp_servers` schema field on `AgentProfile` (parsed; full MCP integration deferred) + `GET /api/profiles` endpoint + web UI agent switcher dropdown and details panel showing description, tools, MCP servers, and per-turn classified token usage
 - ✅ **Research + Sales profiles**: `profiles/research-analyst/` (web_search + fetch_url_text + calculator) and `profiles/sales-concierge/` (catalog_lookup + qualify_lead + preview-only lead_capture/checkout) with per-profile `evals/smoke.json`. Sales reads its catalog from `data_root` rather than the KB.
 - ✅ **Frampton profile**: Dark Souls 1 guide grounded in a categorized Fextralife scrape committed at `kb/frampton/` (third-party but public).
 

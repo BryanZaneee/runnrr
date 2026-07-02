@@ -12,7 +12,7 @@ The engine is provider-agnostic and business-agnostic: profiles, knowledge bases
 - [`profiles/sales-concierge/`](./profiles/sales-concierge/) — catalog lookup, lead qualification, and preview-only lead/checkout flows.
 - [`profiles/frampton/`](./profiles/frampton/) — Dark Souls 1 guide grounded in a public Fextralife scrape committed at `kb/frampton/`.
 
-A sibling [`profiles-advanced/`](./profiles-advanced/) folder is reserved for tier-2 multi-channel/multi-tenant agents (WhatsApp, Instagram, Gmail, Google Business). It sits outside `profiles/` so the loader does not pick it up.
+Tier-2 multi-channel/multi-tenant agents (WhatsApp, Instagram, Gmail, Google Business) need a different runtime (channel adapters, queues, durable state) and will live in their own deployment when built — they are out of scope for this engine.
 
 ## Quick start
 
@@ -42,6 +42,18 @@ Run the backend, then (optionally) the local dashboard:
 ```
 
 Visit `http://localhost:8000` for the dashboard (it defaults to `http://127.0.0.1:8001` for API calls). The public chat UI lives in the separate [`bryanzane_v3`](https://github.com/BryanZaneee/bryanzane_v3) repo under `easyagent/`, deployed at [bryanzane.com/easyagent](https://bryanzane.com/easyagent/).
+
+## Agent Builder (local)
+
+A no-code page for creating and configuring an agent, then trying it immediately in a chat pane. Gated by `ENABLE_PROFILE_EDITOR` (default off) so the write API has no surface in production.
+
+```bash
+echo "ENABLE_PROFILE_EDITOR=1" >> .env
+.venv/bin/python -m uvicorn backend.app:app --reload --port 8001
+.venv/bin/python -m http.server 8000 --directory web
+```
+
+Open `http://localhost:8000/builder/`. Agents you create there are written under `profiles/<id>/` and can only be edited by the builder that made them — bundled example profiles stay read-only. Keep `ENABLE_PROFILE_EDITOR` unset (or `0`) in production.
 
 ## Usability guide
 

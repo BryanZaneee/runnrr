@@ -21,11 +21,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
-from backend import config
+from backend import builder, config
 from backend.agent import run_conversation_stream
 from backend.budget import TOKEN_BUDGET
 from backend.config import (
@@ -39,13 +38,13 @@ from backend.config import (
     MODEL_REGISTRY,
     PROFILE_ROOT,
     RATE_LIMIT_CHAT,
-    RATE_LIMIT_ENABLED,
     SESSION_TTL,
     available_models,
 )
 from backend.logging_config import configure_logging
 from backend.providers.base import LLMProvider
 from backend.providers.registry import ProviderSetupError, build_provider
+from backend.ratelimit import limiter
 from backend.evals import store
 from backend.profiles import AgentProfile, ProfileConfigError, load_profile
 from backend.rag.status import rag_index_payload
@@ -123,8 +122,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="EasyAgent", version="0.1.0", lifespan=lifespan)
+app.include_router(builder.router)
+app.include_router(builder.builder_router)
 
-limiter = Limiter(key_func=get_remote_address, enabled=RATE_LIMIT_ENABLED)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -134,7 +134,7 @@ if ALLOWED_ORIGINS:
         allow_origins=ALLOWED_ORIGINS,
         allow_credentials=False,
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "X-Builder-Owner"],
     )
 else:
     app.add_middleware(
@@ -142,7 +142,7 @@ else:
         allow_origin_regex=r"^http://(localhost|127\.0\.0\.1|\[::1\]):\d+$",
         allow_credentials=False,
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "X-Builder-Owner"],
     )
 
 
@@ -254,6 +254,9 @@ async def list_profiles() -> dict:
                 p = load_profile(entry.name)
             except Exception as exc:
                 log.warning("skipping unloadable profile %s: %s", entry.name, exc)
+                continue
+            if p.builder:
+                # Visitor-created agents are unlisted; creators reach them by id.
                 continue
             out.append({
                 "id": p.id,

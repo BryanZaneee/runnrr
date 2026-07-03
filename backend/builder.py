@@ -283,11 +283,15 @@ async def read_profile(
     profile_id: str,
     x_builder_owner: str | None = Header(default=None, alias="X-Builder-Owner"),
 ) -> dict:
-    profile_dir = _require_editable(profile_id, x_builder_owner)
+    profile_dir = _profile_dir(profile_id)
     cfg_path = profile_dir / "profile.json"
     if not cfg_path.exists():
         raise HTTPException(status_code=404, detail=f"no agent named '{profile_id}'")
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    # Bundled profiles are readable by anyone as read-only examples (their
+    # configs are public in the repo); builder profiles keep the owner check.
+    if cfg.get("builder"):
+        _require_editable(profile_id, x_builder_owner)
     system_path = profile_dir / "system.md"
     return {
         "id": profile_id,
@@ -298,6 +302,7 @@ async def read_profile(
         "suggestions": cfg.get("suggestions", []),
         "tools": cfg.get("tools", []),
         "accent": (cfg.get("brand") or {}).get("accent", ""),
+        "readonly": not cfg.get("builder", False),
     }
 
 

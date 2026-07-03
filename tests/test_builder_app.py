@@ -148,6 +148,23 @@ class TestSaveProfile:
         )
         assert r.status_code == 409
 
+    def test_bundled_profile_readable_as_example(self, builder_client):
+        c, _, profiles_root = builder_client
+        prof_dir = profiles_root / "bundled"
+        prof_dir.mkdir()
+        (prof_dir / "profile.json").write_text(
+            json.dumps({"id": "bundled", "label": "Bundled", "tools": ["search_kb"]})
+        )
+        (prof_dir / "system.md").write_text("You are the bundled example.")
+
+        # No owner header needed: bundled profiles are public read-only examples.
+        r = c.get("/api/builder/profile/bundled")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["readonly"] is True
+        assert body["instructions"] == "You are the bundled example."
+        assert body["tools"] == ["search_kb"]
+
     def test_read_back_editable_fields(self, builder_client):
         c, _, _ = builder_client
         c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)

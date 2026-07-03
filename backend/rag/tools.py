@@ -42,7 +42,11 @@ def semantic_search_kb(
     # Imported lazily so backend.tools.registry can build this tool's schema
     # without pulling the RAG retrieval graph (embeddings/reranker/retriever)
     # at import time — only profiles that actually call the tool load it.
-    from backend.rag.retriever import hybrid_candidate_pool, run_hybrid_query
+    from backend.rag.retriever import (
+        get_retriever_for_profile,
+        hybrid_candidate_pool,
+        run_hybrid_query,
+    )
 
     q = query.strip()
     pool = hybrid_candidate_pool(k, rerank=config.RERANK_ENABLED)
@@ -59,6 +63,11 @@ def semantic_search_kb(
         raise SemanticSearchError(str(exc)) from exc
     if context is not None:
         context.scratch["rag_trace_results"] = results
+        # Cached retriever (run_hybrid_query just built it); one SUM query.
+        retriever = get_retriever_for_profile(
+            profile, embedding_provider=embedding_provider, index_dir=index_dir
+        )
+        context.scratch["rag_trace_kb_tokens"] = retriever.vector.total_tokens()
     return [
         {
             "path": result.chunk.path,

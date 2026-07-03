@@ -235,6 +235,7 @@ def semantic_search_metadata(
         meta["rag_trace"] = {
             "entries": entries,
             "retrieved_tokens": sum(e["tokens"] for e in entries),
+            "kb_tokens": context.scratch.get("rag_trace_kb_tokens"),
         }
     return meta
 

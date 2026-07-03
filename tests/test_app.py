@@ -383,6 +383,7 @@ class TestChat:
         assert trace["retrieved_tokens"] == sum(
             e["tokens"] for e in trace["entries"]
         )
+        assert trace["kb_tokens"] >= trace["retrieved_tokens"]
         trace_blob = json.dumps(trace)
         assert "projects/" not in trace_blob
         assert "alpha.md" not in trace_blob

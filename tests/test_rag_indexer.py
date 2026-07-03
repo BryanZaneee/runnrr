@@ -9,6 +9,7 @@ import pytest
 from backend.profiles import AgentProfile
 from backend.rag.embeddings import FakeEmbeddingProvider
 from backend.rag.indexer import Indexer
+from backend.rag.pca import PCA_FILENAME, load_pca_sidecar, project_query
 from backend.rag.retriever import get_retriever_for_profile
 
 MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
@@ -317,3 +318,56 @@ def test_cli_build_info_and_query_with_fake_backend(
     ) == 0
     query_out = json.loads(capsys.readouterr().out)
     assert query_out[0]["path"] == "projects/alpha.md"
+
+
+def test_indexer_writes_pca_sidecar(sqlite_vec_available, tmp_path, mini_profile) -> None:
+    index_dir = tmp_path / "index"
+    provider = FakeEmbeddingProvider(dim=64)
+    report = Indexer(mini_profile, provider, index_dir=index_dir).build()
+
+    pca_path = index_dir / PCA_FILENAME
+    assert pca_path.exists()
+    payload = load_pca_sidecar(index_dir)
+    assert payload is not None
+    assert len(payload["mean"]) == 64
+    assert len(payload["components"]) == 2
+    assert all(len(row) == 64 for row in payload["components"])
+    assert len(payload["points"]) == report.total_chunks
+
+    from backend.rag.vector_index import VectorIndex
+
+    vector = VectorIndex(index_dir / "index.sqlite", dim=64)
+    try:
+        pairs = vector.all_embeddings()
+        stored = {p["id"]: (p["x"], p["y"]) for p in payload["points"]}
+        for chunk, emb in pairs[:3]:
+            px, py = project_query(payload, emb)
+            sx, sy = stored[chunk.chunk_id]
+            assert abs(px - sx) < 1e-3
+            assert abs(py - sy) < 1e-3
+    finally:
+        vector.close()
+
+
+def test_indexer_builds_without_pca_when_numpy_missing(
+    sqlite_vec_available,
+    tmp_path,
+    mini_profile,
+    monkeypatch,
+) -> None:
+    import builtins
+
+    real_import = builtins.__import__
+
+    def blocked_import(name, *args, **kwargs):
+        if name == "numpy":
+            raise ImportError("numpy blocked for test")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked_import)
+    index_dir = tmp_path / "index"
+    report = Indexer(
+        mini_profile, FakeEmbeddingProvider(dim=64), index_dir=index_dir
+    ).build()
+    assert report.embedded_chunks > 0
+    assert not (index_dir / PCA_FILENAME).exists()

@@ -39,6 +39,14 @@ class RetrievalResult:
     vector_rank: int | None = None
 
 
+@dataclass(frozen=True)
+class RetrievalSignals:
+    query_embedding: list[float]
+    bm25_results: list[tuple[Chunk, float]]
+    vector_results: list[tuple[Chunk, float]]
+    fused: list[RetrievalResult]
+
+
 class Retriever:
     def __init__(
         self,
@@ -59,6 +67,18 @@ class Retriever:
         candidate_k: int | None = None,
         k_rrf: int = DEFAULT_RRF_K,
     ) -> list[RetrievalResult]:
+        return self.search_with_signals(
+            query, k=k, candidate_k=candidate_k, k_rrf=k_rrf
+        ).fused
+
+    def search_with_signals(
+        self,
+        query: str,
+        *,
+        k: int = 5,
+        candidate_k: int | None = None,
+        k_rrf: int = DEFAULT_RRF_K,
+    ) -> RetrievalSignals:
         if not isinstance(query, str) or not query.strip():
             raise ValueError("query must be a non-empty string")
         k = max(1, int(k))
@@ -73,7 +93,12 @@ class Retriever:
             k=k,
             k_rrf=k_rrf,
         )
-        return fused
+        return RetrievalSignals(
+            query_embedding=query_embedding,
+            bm25_results=bm25_results,
+            vector_results=vector_results,
+            fused=fused,
+        )
 
     def close(self) -> None:
         close = getattr(self.vector, "close", None)

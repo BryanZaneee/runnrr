@@ -12,6 +12,7 @@ from backend.rag.chunker import Chunk, chunk_markdown
 from backend.rag.embeddings import EmbeddingProvider, get_embedding_provider
 from backend.kb_loader import _safe_resolve
 from backend.rag.manifest import FileEntry, Manifest, compute_diff, scan_markdown_files
+from backend.rag.pca import PCA_FILENAME, compute_pca_sidecar, write_pca_sidecar
 from backend.rag.vector_index import VectorIndex
 
 BM25_FILENAME = "bm25.pkl"
@@ -130,6 +131,12 @@ class Indexer:
                 embedded_chunks += self._embed_and_write(chunks, bm25=bm25, vector=vector)
 
             bm25.save(self.bm25_path)
+            self._maybe_write_pca_sidecar(
+                vector,
+                embedded_chunks=embedded_chunks,
+                deleted_vector_chunks=deleted_vector,
+                rebuilt=rebuilt,
+            )
         finally:
             vector.close()
 
@@ -234,6 +241,35 @@ class Indexer:
         for path in (self.manifest_path, self.bm25_path, self.vector_path):
             if path.exists():
                 path.unlink()
+
+    def _maybe_write_pca_sidecar(
+        self,
+        vector: VectorIndex,
+        *,
+        embedded_chunks: int,
+        deleted_vector_chunks: int,
+        rebuilt: bool,
+    ) -> None:
+        pca_path = self.index_dir / PCA_FILENAME
+        should_regenerate = (
+            embedded_chunks > 0
+            or deleted_vector_chunks > 0
+            or rebuilt
+            or not pca_path.exists()
+        )
+        if not should_regenerate:
+            return
+        payload = compute_pca_sidecar(
+            vector,
+            backend=self.embedding.backend,
+            model=self.embedding.model,
+            dim=self.embedding.dim,
+        )
+        if payload is None:
+            if pca_path.exists():
+                pca_path.unlink()
+            return
+        write_pca_sidecar(self.index_dir, payload)
 
     def _clear_cached_retriever(self) -> None:
         from backend.rag.retriever import clear_retriever_cache

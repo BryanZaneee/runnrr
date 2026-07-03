@@ -74,6 +74,15 @@ def _match_path_label(path: str, path_labels: Sequence[tuple[str, str]] | None) 
     return None
 
 
+def label_from_kb_path(
+    path: str,
+    labels: Mapping[str, str] | None = None,
+    path_labels: Sequence[tuple[str, str]] | None = None,
+) -> str:
+    """Public wrapper around the KB-path → display-label mapper."""
+    return _label_from_kb_path(path, labels, path_labels)
+
+
 def _label_from_kb_path(
     path: str,
     labels: Mapping[str, str] | None = None,
@@ -194,13 +203,37 @@ def semantic_search_metadata(
     context: ToolContext | None = None,
 ) -> dict[str, Any]:
     labels, path_labels = _profile_labels(context)
-    return _kb_search_metadata(
+    meta = _kb_search_metadata(
         out,
         kind="kb_semantic_search",
         verb="semantic searched",
         labels=labels,
         path_labels=path_labels,
     )
+    trace_results = (
+        context.scratch.get("rag_trace_results") if context is not None else None
+    )
+    if trace_results:
+        meta["rag_trace"] = {
+            "entries": [
+                {
+                    "label": _clean_label(
+                        _label_from_kb_path(r.chunk.path, labels, path_labels)
+                    ),
+                    "score": round(r.score, 4),
+                    "bm25_score": round(r.bm25_score, 3)
+                    if r.bm25_score is not None
+                    else None,
+                    "bm25_rank": r.bm25_rank,
+                    "vector_score": round(r.vector_score, 4)
+                    if r.vector_score is not None
+                    else None,
+                    "vector_rank": r.vector_rank,
+                }
+                for r in trace_results
+            ]
+        }
+    return meta
 
 
 def list_kb_metadata(

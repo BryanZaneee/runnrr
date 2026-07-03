@@ -19,6 +19,7 @@ class ToolResult:
     source_items: list[dict[str, str]] = field(default_factory=list)
     source_count: int = 0
     hidden_count: int = 0
+    rag_trace: dict | None = None
 
 
 def _tool_result(
@@ -38,10 +39,12 @@ def _tool_result(
         is_error=is_error,
         context=context,
     )
+    rag_trace = meta.pop("rag_trace", None)
     return ToolResult(
         tool_use_id=tool_use_id,
         name=name,
         content=content,
         is_error=is_error,
+        rag_trace=rag_trace,
         **meta,
     )

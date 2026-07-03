@@ -122,7 +122,7 @@ async def run_conversation_stream(
             for tc in tool_calls_pending
         ]
         for r in results:
-            yield {
+            payload = {
                 "event": "tool_result",
                 "tool_use_id": r.tool_use_id,
                 "name": r.name,
@@ -132,6 +132,9 @@ async def run_conversation_stream(
                 "source_count": r.source_count,
                 "hidden_count": r.hidden_count,
             }
+            if r.rag_trace:
+                payload["rag_trace"] = r.rag_trace
+            yield payload
         provider.append_tool_results(session["messages"], results)
 
     yield {"event": "error", "message": f"hit MAX_TOOL_HOPS={MAX_TOOL_HOPS}"}

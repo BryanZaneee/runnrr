@@ -231,6 +231,43 @@ class VectorIndex:
             out.append((self._chunk_from_row(row), float(row["distance"])))
         return out
 
+    def all_embeddings(self) -> list[tuple[Chunk, list[float]]]:
+        conn = self._connect()
+        rows = conn.execute(
+            """
+            SELECT c.chunk_id, c.path, c.heading_path,
+                   c.start_line, c.end_line, c.content, c.tokens_est,
+                   v.embedding AS embedding
+            FROM chunks c
+            JOIN vec_chunks v ON c.rowid = v.rowid
+            ORDER BY c.chunk_id
+            """
+        ).fetchall()
+        out: list[tuple[Chunk, list[float]]] = []
+        for row in rows:
+            embedding = list(struct.unpack(f"{self.dim}f", row["embedding"]))
+            out.append((self._chunk_from_row(row), embedding))
+        return out
+
+    def embeddings_for(self, chunk_ids: list[str]) -> dict[str, list[float]]:
+        if not chunk_ids:
+            return {}
+        conn = self._connect()
+        placeholders = ",".join("?" * len(chunk_ids))
+        rows = conn.execute(
+            f"""
+            SELECT c.chunk_id, v.embedding AS embedding
+            FROM chunks c
+            JOIN vec_chunks v ON c.rowid = v.rowid
+            WHERE c.chunk_id IN ({placeholders})
+            """,
+            chunk_ids,
+        ).fetchall()
+        return {
+            row["chunk_id"]: list(struct.unpack(f"{self.dim}f", row["embedding"]))
+            for row in rows
+        }
+
     @staticmethod
     def _chunk_from_row(row: sqlite3.Row) -> Chunk:
         return Chunk(

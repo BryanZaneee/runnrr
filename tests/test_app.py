@@ -286,6 +286,7 @@ class TestChat:
         assert "resume/resume.md" not in body
         assert "resume.md" not in body
         assert str(kb_root) not in body
+        assert '"rag_trace"' not in body
 
     def test_semantic_search_runs_through_chat_endpoint(
         self,
@@ -364,6 +365,17 @@ class TestChat:
         assert tool_payloads[0]["source_items"][0]["kind"] == "kb_semantic_search"
         assert "projects/alpha.md" not in body
         assert str(kb) not in body
+
+        trace = tool_payloads[0].get("rag_trace")
+        assert trace and trace.get("entries")
+        trace_keys = {
+            "label", "score", "bm25_score", "bm25_rank", "vector_score", "vector_rank"
+        }
+        for entry in trace["entries"]:
+            assert set(entry.keys()) == trace_keys
+        trace_blob = json.dumps(trace)
+        assert "projects/" not in trace_blob
+        assert "alpha.md" not in trace_blob
 
     def test_session_state_grows(self, client, monkeypatch, fake_provider_cls):
         c, app_module = client
@@ -456,3 +468,120 @@ class TestChat:
         assert sess["profile"] == "profile-b"
         assert len(sess["messages"]) == 2
         assert sess["messages"][0]["content"] == "hi again"
+
+
+class TestRagInspect:
+    def _build_mini_rag(self, monkeypatch, tmp_path):
+        pytest.importorskip("sqlite_vec")
+        from backend import config
+        from backend.rag.embeddings import FakeEmbeddingProvider
+        from backend.rag.indexer import Indexer
+
+        kb = tmp_path / "mini_rag_kb"
+        shutil.copytree(MINI_RAG_FIXTURE, kb)
+        index_root = tmp_path / "indexes"
+        monkeypatch.setattr(config, "RAG_INDEX_ROOT", index_root)
+        monkeypatch.setattr(config, "EMBEDDING_BACKEND", "fake")
+        monkeypatch.setattr(config, "EMBEDDING_MODEL", "")
+        profile = AgentProfile(
+            id="mini",
+            label="Mini",
+            description="Mini RAG profile",
+            kb_root=kb,
+            system_prompt="test-system",
+            tools=("list_kb", "read_file", "search_kb", "semantic_search_kb"),
+        )
+        Indexer(
+            profile,
+            FakeEmbeddingProvider(),
+            index_dir=index_root / profile.id,
+        ).build()
+        return profile, index_root
+
+    def test_inspect_returns_pipeline_signals(self, client, monkeypatch, tmp_path):
+        c, app_module = client
+        profile, _index_root = self._build_mini_rag(monkeypatch, tmp_path)
+        monkeypatch.setattr(app_module, "get_profile", lambda profile_id="mini": profile)
+
+        r = c.post(
+            "/api/rag/inspect",
+            json={"profile": "mini", "query": "portable profile retrieval", "k": 3},
+        )
+        assert r.status_code == 200
+        body = r.json()
+
+        assert body["profile_id"] == "mini"
+        assert body["k"] == 3
+        assert len(body["embedding"]["preview"]) == 64
+        assert body["bm25"]
+        assert body["vector"]
+        assert body["results"]
+        result_keys = {
+            "id",
+            "label",
+            "path",
+            "heading_path",
+            "start_line",
+            "end_line",
+            "snippet",
+            "score",
+            "bm25_score",
+            "bm25_rank",
+            "vector_distance",
+            "vector_rank",
+            "cosine",
+        }
+        for row in body["results"]:
+            assert result_keys <= set(row.keys())
+            assert -1.0 <= row["cosine"] <= 1.0
+
+        assert body["map"]["available"] is True
+        point_ids = {p["id"] for p in body["map"]["points"]}
+        assert set(body["map"]["result_ids"]) <= point_ids
+        assert "x" in body["map"]["query"] and "y" in body["map"]["query"]
+
+    def test_inspect_map_unavailable_without_pca(self, client, monkeypatch, tmp_path):
+        c, app_module = client
+        profile, index_root = self._build_mini_rag(monkeypatch, tmp_path)
+        monkeypatch.setattr(app_module, "get_profile", lambda profile_id="mini": profile)
+
+        (index_root / profile.id / "pca.json").unlink()
+
+        r = c.post(
+            "/api/rag/inspect",
+            json={"profile": "mini", "query": "portable profile retrieval"},
+        )
+        assert r.status_code == 200
+        assert r.json()["map"] == {"available": False}
+
+    def test_inspect_404_without_semantic_search_tool(self, client, monkeypatch, tmp_path):
+        c, app_module = client
+        profile, _index_root = self._build_mini_rag(monkeypatch, tmp_path)
+        no_rag = AgentProfile(
+            id=profile.id,
+            label=profile.label,
+            description=profile.description,
+            kb_root=profile.kb_root,
+            system_prompt=profile.system_prompt,
+            tools=("list_kb", "read_file", "search_kb"),
+        )
+        monkeypatch.setattr(app_module, "get_profile", lambda profile_id="mini": no_rag)
+
+        r = c.post(
+            "/api/rag/inspect",
+            json={"profile": "mini", "query": "portable profile retrieval"},
+        )
+        assert r.status_code == 404
+
+    def test_inspect_503_when_index_missing(self, client, monkeypatch, tmp_path):
+        c, app_module = client
+        profile, index_root = self._build_mini_rag(monkeypatch, tmp_path)
+        monkeypatch.setattr(app_module, "get_profile", lambda profile_id="mini": profile)
+        shutil.rmtree(index_root / profile.id)
+
+        r = c.post(
+            "/api/rag/inspect",
+            json={"profile": "mini", "query": "portable profile retrieval"},
+        )
+        assert r.status_code == 503
+        assert "not built" in r.json()["detail"].lower()

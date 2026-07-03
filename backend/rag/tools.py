@@ -27,6 +27,7 @@ def semantic_search_kb(
     profile: AgentProfile | None,
     embedding_provider: EmbeddingProvider | None = None,
     index_dir: Path | None = None,
+    context: "ToolContext | None" = None,
 ) -> list[dict[str, Any]]:
     """Search the active profile's hybrid RAG index."""
     if profile is None:
@@ -56,6 +57,8 @@ def semantic_search_kb(
         )[:k]
     except FileNotFoundError as exc:
         raise SemanticSearchError(str(exc)) from exc
+    if context is not None:
+        context.scratch["rag_trace_results"] = results
     return [
         {
             "path": result.chunk.path,
@@ -114,6 +117,7 @@ def build_semantic_search_tool() -> "ToolDef":
             args["query"],
             k=args.get("k", 5),
             profile=ctx.profile,
+            context=ctx,
         ),
         source_metadata=semantic_search_metadata,
     )

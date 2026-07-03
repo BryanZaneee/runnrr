@@ -1,7 +1,7 @@
 """Shared native tool definition types."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -13,6 +13,7 @@ class ToolContext:
     root: Path | None = None
     data_root: Path | None = None
     profile: AgentProfile | None = None
+    scratch: dict[str, Any] = field(default_factory=dict)
 
 
 ToolHandler = Callable[[dict[str, Any], ToolContext], Any]

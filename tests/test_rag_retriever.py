@@ -81,6 +81,25 @@ def test_retriever_queries_both_indexes() -> None:
     assert results[0].score > 0
 
 
+def test_search_with_signals_matches_search_fused_and_exposes_embedding() -> None:
+    a = _chunk("a", "a.md", "portable profile retrieval")
+    b = _chunk("b", "b.md", "customer service policy")
+    provider = FakeEmbeddingProvider()
+    retriever = Retriever(
+        embedding_provider=provider,
+        bm25_index=StubIndex([(a, 0.1)]),
+        vector_index=StubIndex([(b, 0.2)]),
+    )
+
+    signals = retriever.search_with_signals("portable profile", k=2)
+    fused = retriever.search("portable profile", k=2)
+
+    assert len(signals.query_embedding) == provider.dim
+    assert [r.chunk.chunk_id for r in signals.fused] == [
+        r.chunk.chunk_id for r in fused
+    ]
+
+
 class _RecordingRetriever:
     """Stand-in for a built Retriever; records the pool size it was queried with."""
 

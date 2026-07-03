@@ -33,6 +33,9 @@ MAX_ACTIVE_SESSIONS: int = int(os.environ.get("MAX_ACTIVE_SESSIONS", "200"))
 
 # Per-IP rate limit on POST /api/chat. slowapi syntax: "<count>/<period>" joined by ";".
 RATE_LIMIT_CHAT: str = os.environ.get("RATE_LIMIT_CHAT", "10/minute;100/hour")
+RATE_LIMIT_RAG_INSPECT: str = os.environ.get(
+    "RATE_LIMIT_RAG_INSPECT", "5/minute;30/hour"
+)
 RATE_LIMIT_ENABLED: bool = os.environ.get("RATE_LIMIT_ENABLED", "1") == "1"
 
 LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")

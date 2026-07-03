@@ -38,6 +38,7 @@ from backend.config import (
     MODEL_REGISTRY,
     PROFILE_ROOT,
     RATE_LIMIT_CHAT,
+    RATE_LIMIT_RAG_INSPECT,
     SESSION_TTL,
     available_models,
 )
@@ -47,6 +48,7 @@ from backend.providers.registry import ProviderSetupError, build_provider
 from backend.ratelimit import limiter
 from backend.evals import store
 from backend.profiles import AgentProfile, ProfileConfigError, load_profile
+from backend.rag.inspect import inspect_payload
 from backend.rag.status import rag_index_payload
 from backend.status import runtime_status_payload
 from backend.tools import schemas_for_tools
@@ -153,6 +155,12 @@ class ChatRequest(BaseModel):
     profile: str = Field(default=DEFAULT_PROFILE, min_length=1, max_length=64)
 
 
+class RagInspectRequest(BaseModel):
+    profile: str = Field(default=DEFAULT_PROFILE, min_length=1, max_length=64)
+    query: str = Field(..., min_length=1, max_length=400)
+    k: int = Field(default=5, ge=1, le=8)
+
+
 @app.get("/api/health")
 async def health() -> dict:
     return {"status": "ok", "sessions": len(SESSIONS)}
@@ -179,6 +187,22 @@ async def status() -> dict:
 async def rag_index(profile_id: str = DEFAULT_PROFILE) -> dict:
     """RAG index health for one profile. Used by the local technical dashboard."""
     return rag_index_payload(get_profile(profile_id))
+
+
+@app.post("/api/rag/inspect")
+@limiter.limit(RATE_LIMIT_RAG_INSPECT)
+async def rag_inspect(request: Request, req: RagInspectRequest) -> dict:
+    profile = get_profile(req.profile)
+    if profile.builder or "semantic_search_kb" not in profile.tools:
+        raise HTTPException(
+            status_code=404, detail="retrieval inspection not available for this profile"
+        )
+    try:
+        return inspect_payload(profile, req.query.strip(), req.k)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=503, detail="retrieval index not built for this profile"
+        ) from exc
 
 
 def _require_evals_api() -> None:

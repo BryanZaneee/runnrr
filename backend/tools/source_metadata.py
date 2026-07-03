@@ -214,24 +214,27 @@ def semantic_search_metadata(
         context.scratch.get("rag_trace_results") if context is not None else None
     )
     if trace_results:
+        entries = [
+            {
+                "label": _clean_label(
+                    _label_from_kb_path(r.chunk.path, labels, path_labels)
+                ),
+                "score": round(r.score, 4),
+                "bm25_score": round(r.bm25_score, 3)
+                if r.bm25_score is not None
+                else None,
+                "bm25_rank": r.bm25_rank,
+                "vector_score": round(r.vector_score, 4)
+                if r.vector_score is not None
+                else None,
+                "vector_rank": r.vector_rank,
+                "tokens": r.chunk.tokens_est,
+            }
+            for r in trace_results
+        ]
         meta["rag_trace"] = {
-            "entries": [
-                {
-                    "label": _clean_label(
-                        _label_from_kb_path(r.chunk.path, labels, path_labels)
-                    ),
-                    "score": round(r.score, 4),
-                    "bm25_score": round(r.bm25_score, 3)
-                    if r.bm25_score is not None
-                    else None,
-                    "bm25_rank": r.bm25_rank,
-                    "vector_score": round(r.vector_score, 4)
-                    if r.vector_score is not None
-                    else None,
-                    "vector_rank": r.vector_rank,
-                }
-                for r in trace_results
-            ]
+            "entries": entries,
+            "retrieved_tokens": sum(e["tokens"] for e in entries),
         }
     return meta
 

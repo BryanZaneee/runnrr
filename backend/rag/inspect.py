@@ -61,6 +61,8 @@ def inspect_payload(profile: AgentProfile, query: str, k: int) -> dict:
     try:
         fused_ids = [r.chunk.chunk_id for r in signals.fused]
         fused_embeddings = vector.embeddings_for(fused_ids)
+        kb_tokens = vector.total_tokens()
+        kb_chunks = len(vector)
     finally:
         vector.close()
 
@@ -124,6 +126,14 @@ def inspect_payload(profile: AgentProfile, query: str, k: int) -> dict:
     else:
         map_block = {"available": False}
 
+    retrieved_tokens = sum(r.chunk.tokens_est for r in signals.fused)
+    retrieved_pct = (
+        round(retrieved_tokens / kb_tokens * 100, 2) if kb_tokens else 0.0
+    )
+    total_ms = round(
+        sum(signals.timings[k] for k in ("embed_ms", "bm25_ms", "vector_ms")), 1
+    )
+
     return {
         "profile_id": profile.id,
         "query": query,
@@ -138,6 +148,13 @@ def inspect_payload(profile: AgentProfile, query: str, k: int) -> dict:
         "vector": vector_out,
         "results": results_out,
         "map": map_block,
+        "timings": {**signals.timings, "total_ms": total_ms},
+        "efficiency": {
+            "kb_tokens": kb_tokens,
+            "retrieved_tokens": retrieved_tokens,
+            "retrieved_pct": retrieved_pct,
+            "kb_chunks": kb_chunks,
+        },
     }
 
 

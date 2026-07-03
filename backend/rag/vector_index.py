@@ -283,3 +283,9 @@ class VectorIndex:
     def __len__(self) -> int:
         conn = self._connect()
         return conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+
+    def total_tokens(self) -> int:
+        conn = self._connect()
+        return conn.execute(
+            "SELECT COALESCE(SUM(tokens_est), 0) FROM chunks"
+        ).fetchone()[0]

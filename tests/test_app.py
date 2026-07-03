@@ -369,10 +369,20 @@ class TestChat:
         trace = tool_payloads[0].get("rag_trace")
         assert trace and trace.get("entries")
         trace_keys = {
-            "label", "score", "bm25_score", "bm25_rank", "vector_score", "vector_rank"
+            "label",
+            "score",
+            "bm25_score",
+            "bm25_rank",
+            "vector_score",
+            "vector_rank",
+            "tokens",
         }
         for entry in trace["entries"]:
             assert set(entry.keys()) == trace_keys
+            assert isinstance(entry["tokens"], int)
+        assert trace["retrieved_tokens"] == sum(
+            e["tokens"] for e in trace["entries"]
+        )
         trace_blob = json.dumps(trace)
         assert "projects/" not in trace_blob
         assert "alpha.md" not in trace_blob
@@ -539,6 +549,15 @@ class TestRagInspect:
         point_ids = {p["id"] for p in body["map"]["points"]}
         assert set(body["map"]["result_ids"]) <= point_ids
         assert "x" in body["map"]["query"] and "y" in body["map"]["query"]
+
+        timings = body["timings"]
+        for key in ("embed_ms", "bm25_ms", "vector_ms", "total_ms"):
+            assert key in timings
+            assert timings[key] >= 0.0
+        eff = body["efficiency"]
+        assert eff["retrieved_tokens"] > 0
+        assert eff["kb_tokens"] >= eff["retrieved_tokens"]
+        assert eff["kb_chunks"] > 0
 
     def test_inspect_map_unavailable_without_pca(self, client, monkeypatch, tmp_path):
         c, app_module = client

@@ -1,6 +1,7 @@
 """Hybrid BM25 + vector retrieval with plain Reciprocal Rank Fusion."""
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
@@ -45,6 +46,7 @@ class RetrievalSignals:
     bm25_results: list[tuple[Chunk, float]]
     vector_results: list[tuple[Chunk, float]]
     fused: list[RetrievalResult]
+    timings: dict[str, float]
 
 
 class Retriever:
@@ -84,9 +86,18 @@ class Retriever:
         k = max(1, int(k))
         candidate_k = max(k, int(candidate_k or k * 4))
 
+        t0 = time.perf_counter()
         bm25_results = self.bm25.search(query, k=candidate_k)
+        bm25_ms = round((time.perf_counter() - t0) * 1000, 1)
+
+        t0 = time.perf_counter()
         query_embedding = self.embedding.embed_query(query)
+        embed_ms = round((time.perf_counter() - t0) * 1000, 1)
+
+        t0 = time.perf_counter()
         vector_results = self.vector.search(query_embedding, k=candidate_k)
+        vector_ms = round((time.perf_counter() - t0) * 1000, 1)
+
         fused = reciprocal_rank_fusion(
             bm25_results=bm25_results,
             vector_results=vector_results,
@@ -98,6 +109,11 @@ class Retriever:
             bm25_results=bm25_results,
             vector_results=vector_results,
             fused=fused,
+            timings={
+                "embed_ms": embed_ms,
+                "bm25_ms": bm25_ms,
+                "vector_ms": vector_ms,
+            },
         )
 
     def close(self) -> None:

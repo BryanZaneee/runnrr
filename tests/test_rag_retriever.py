@@ -98,6 +98,9 @@ def test_search_with_signals_matches_search_fused_and_exposes_embedding() -> Non
     assert [r.chunk.chunk_id for r in signals.fused] == [
         r.chunk.chunk_id for r in fused
     ]
+    for key in ("embed_ms", "bm25_ms", "vector_ms"):
+        assert key in signals.timings
+        assert signals.timings[key] >= 0.0
 
 
 class _RecordingRetriever:

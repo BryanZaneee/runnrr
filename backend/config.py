@@ -71,6 +71,7 @@ RATE_LIMIT_BUILDER: str = os.environ.get("RATE_LIMIT_BUILDER", "10/minute;40/hou
 # Global cap on builder-created profiles (disk bound), and per-profile note cap.
 MAX_BUILDER_PROFILES: int = int(os.environ.get("MAX_BUILDER_PROFILES", "200"))
 MAX_NOTES_PER_PROFILE: int = int(os.environ.get("MAX_NOTES_PER_PROFILE", "20"))
+MAX_SKILLS_PER_PROFILE: int = int(os.environ.get("MAX_SKILLS_PER_PROFILE", "20"))
 # Builder profiles untouched for this many days are swept on the next create.
 BUILDER_PROFILE_TTL_DAYS: int = int(os.environ.get("BUILDER_PROFILE_TTL_DAYS", "30"))
 RERANK_ENABLED: bool = os.environ.get("EASYAGENT_RERANK", "0") == "1"

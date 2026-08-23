@@ -143,10 +143,22 @@ def _norm_usage(u: Any, thinking_tokens: int = 0) -> UsagePayload:
     # it from output_tokens so the two are disjoint and the frontend can sum them.
     output_total = getattr(u, "output_tokens", 0) or 0
     reasoning = max(0, min(thinking_tokens, output_total))
+
+    # Anthropic is the only provider that reports input_tokens EXCLUDING cached
+    # reads; OpenAI, Gemini, and DeepSeek all report the full prompt size with
+    # the cached portion as a subset. Normalize to the majority so that
+    # `cache_read <= input_tokens` holds everywhere and a cache-hit ratio means
+    # the same thing on every provider. See backend/usage.py for the contract.
+    cache_read = getattr(u, "cache_read_input_tokens", 0) or 0
+    cache_creation = getattr(u, "cache_creation_input_tokens", 0) or 0
     return {
-        "input_tokens": getattr(u, "input_tokens", 0) or 0,
+        "input_tokens": (getattr(u, "input_tokens", 0) or 0) + cache_read + cache_creation,
         "output_tokens": output_total - reasoning,
         "reasoning_tokens": reasoning,
-        "cache_read_input_tokens": getattr(u, "cache_read_input_tokens", 0) or 0,
-        "cache_creation_input_tokens": getattr(u, "cache_creation_input_tokens", 0) or 0,
+        # Anthropic exposes no per-block token split, so reasoning_tokens above is
+        # apportioned by character length rather than measured. Flag it: the same
+        # field is a real API measurement on the other two providers.
+        "reasoning_estimated": reasoning > 0,
+        "cache_read_input_tokens": cache_read,
+        "cache_creation_input_tokens": cache_creation,
     }

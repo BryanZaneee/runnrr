@@ -570,3 +570,56 @@ class TestGeminiStreaming:
             "cache_read_input_tokens": 30,
             "cache_creation_input_tokens": 0,
         }
+
+
+# --------------------------------------------------------------------------- #
+# Usage is never silently absent
+# --------------------------------------------------------------------------- #
+
+
+class TestUsageAlwaysEmitted:
+    """An endpoint that reports no usage must not spend unmetered budget.
+
+    Kimi did exactly this on every turn: `stream_options: False` meant
+    `include_usage` was never sent, `usage` stayed None, and the provider yielded
+    no usage event at all — so `TOKEN_BUDGET.record(0)` was a no-op and the
+    traffic was free. An explicit estimate is strictly better than silence.
+    """
+
+    @pytest.mark.asyncio
+    async def test_missing_usage_yields_estimated_event(self):
+        from backend.providers.openai_compat_provider import OpenAICompatProvider
+
+        client = FakeOpenAIClient([
+            _chunk(choices=[_choice(delta=_delta(text="hello there"))]),
+            _chunk(choices=[_choice(finish_reason="stop")]),
+        ])
+        provider = OpenAICompatProvider(
+            api_key_env="X", stream_options=False, client=client
+        )
+
+        events = await _drain(provider, [{"role": "user", "content": "hi"}])
+
+        usages = [e for e in events if e["type"] == "usage"]
+        assert len(usages) == 1, "a usage event must always be emitted"
+        u = usages[0]["usage"]
+        assert u["estimated"] is True
+        assert u["input_tokens"] > 0
+        assert u["output_tokens"] > 0
+
+    @pytest.mark.asyncio
+    async def test_reported_usage_is_not_marked_estimated(self):
+        from backend.providers.openai_compat_provider import OpenAICompatProvider
+
+        client = FakeOpenAIClient([
+            _chunk(choices=[_choice(delta=_delta(text="hi"))]),
+            _chunk(choices=[_choice(finish_reason="stop")]),
+            _chunk(usage=SimpleNamespace(prompt_tokens=7, completion_tokens=2)),
+        ])
+        provider = OpenAICompatProvider(api_key_env="X", client=client)
+
+        events = await _drain(provider, [{"role": "user", "content": "hi"}])
+
+        u = [e for e in events if e["type"] == "usage"][0]["usage"]
+        assert u.get("estimated") is not True
+        assert u["input_tokens"] == 7

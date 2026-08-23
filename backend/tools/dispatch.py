@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 
 from backend import config
@@ -17,7 +18,7 @@ from backend.web_search import WebSearchError
 log = logging.getLogger("easyagent.tools")
 
 
-def run_tool(
+def _run_tool_inner(
     name: str,
     arguments: dict,
     tool_use_id: str,
@@ -104,3 +105,35 @@ def run_tool(
             arguments=arguments,
             context=context,
         )
+
+
+def run_tool(
+    name: str,
+    arguments: dict,
+    tool_use_id: str,
+    *,
+    root: Path | None = None,
+    data_root: Path | None = None,
+    profile: AgentProfile | None = None,
+    allowed_tools: tuple[str, ...] | list[str] | set[str] | None = None,
+) -> ToolResult:
+    """Dispatch a tool call and stamp how long it took.
+
+    Timing lives here rather than at the call site so every caller — the agent
+    loop, evals, anything later — gets it for free. Tools are the dominant
+    source of turn latency and were previously not timed at all. The dispatch
+    itself is `_run_tool_inner`; it has many return paths, so wrapping is
+    smaller and less error-prone than stamping each one.
+    """
+    started = time.perf_counter()
+    result = _run_tool_inner(
+        name,
+        arguments,
+        tool_use_id,
+        root=root,
+        data_root=data_root,
+        profile=profile,
+        allowed_tools=allowed_tools,
+    )
+    result.duration_ms = int((time.perf_counter() - started) * 1000)
+    return result

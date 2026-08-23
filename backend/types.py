@@ -14,11 +14,23 @@ ProviderMessage: TypeAlias = Any
 
 
 class UsagePayload(TypedDict, total=False):
+    """Normalized per-hop token usage. Semantics are defined in backend/usage.py.
+
+    `input_tokens` is the full prompt size; the two cache fields are subsets of
+    it. `reasoning_tokens` is disjoint from `output_tokens`.
+    """
+
     input_tokens: int
     output_tokens: int
     reasoning_tokens: int
     cache_read_input_tokens: int
     cache_creation_input_tokens: int
+    # True when the WHOLE payload is a chars/4 fallback because the endpoint
+    # reported no usage at all (see _estimate_usage in the OpenAI-compat provider).
+    estimated: bool
+    # True when only `reasoning_tokens` is approximate — Anthropic exposes no
+    # per-block split, so it is apportioned by character length.
+    reasoning_estimated: bool
 
 
 class SessionDict(TypedDict):

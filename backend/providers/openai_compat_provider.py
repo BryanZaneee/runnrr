@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import logging
 from typing import Any, AsyncIterator
 
 from openai import AsyncOpenAI
@@ -16,6 +17,8 @@ from backend.profiles import AgentProfile
 from backend.providers.base import Event
 from backend.tools import ToolResult, schemas_for_tools
 from backend.types import ProviderMessage, UsagePayload
+
+log = logging.getLogger("easyagent.providers.openai_compat")
 
 
 class OpenAICompatProvider:
@@ -196,9 +199,45 @@ class OpenAICompatProvider:
                 "arguments": _parse_arguments(fn.get("arguments", "")),
             }
 
-        if usage is not None:
-            yield {"type": "usage", "usage": usage}
+        if usage is None:
+            # An endpoint that refuses stream_options (or drops the final usage
+            # chunk) used to yield NO usage event at all, so its traffic spent
+            # completely unmetered budget — that was Kimi's behavior for every
+            # turn. An explicit estimate is strictly better than silence: it is
+            # marked `estimated` so nothing mistakes it for a measurement, and
+            # the budget stops being free. chars/4 is deliberately crude; the
+            # point is a floor, not precision.
+            log.warning(
+                "usage_estimated",
+                extra={"model": model, "reason": "provider returned no usage"},
+            )
+            usage = _estimate_usage(
+                request["messages"], content_parts, reasoning_parts, completed_tool_calls
+            )
+        yield {"type": "usage", "usage": usage}
         yield {"type": "message_done", "stop_reason": stop_reason}
+
+
+def _estimate_usage(
+    prompt_messages: list,
+    content_parts: list[str],
+    reasoning_parts: list[str],
+    tool_calls: list[dict],
+) -> UsagePayload:
+    """Crude chars/4 fallback for endpoints that report no usage at all."""
+    prompt_chars = len(json.dumps(prompt_messages, default=str))
+    output_chars = sum(len(t) for t in content_parts) + len(
+        json.dumps(tool_calls, default=str)
+    )
+    reasoning_chars = sum(len(t) for t in reasoning_parts)
+    return {
+        "input_tokens": max(1, prompt_chars // 4),
+        "output_tokens": max(0, output_chars // 4),
+        "reasoning_tokens": max(0, reasoning_chars // 4),
+        "estimated": True,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+    }
 
 
 def _parse_arguments(raw: str) -> dict:
@@ -232,8 +271,24 @@ def _norm_usage(u: Any) -> UsagePayload:
             or (details.get("reasoning_tokens", 0) if isinstance(details, dict) else 0)
             or 0
         )
-    # DeepSeek surfaces KV-cache hits as prompt_cache_hit_tokens; absent on other providers.
+    # DeepSeek surfaces KV-cache hits as prompt_cache_hit_tokens; OpenAI puts the
+    # same quantity on prompt_tokens_details.cached_tokens. They are mutually
+    # exclusive per endpoint, so read both — before this, OpenAI cache hits were
+    # invisible and always logged as 0. Both are subsets of prompt_tokens, which
+    # is the semantics backend/usage.py requires.
     cache_hit = getattr(u, "prompt_cache_hit_tokens", 0) or 0
+    if not cache_hit:
+        prompt_details = getattr(u, "prompt_tokens_details", None)
+        if prompt_details is not None:
+            cache_hit = (
+                getattr(prompt_details, "cached_tokens", None)
+                or (
+                    prompt_details.get("cached_tokens", 0)
+                    if isinstance(prompt_details, dict)
+                    else 0
+                )
+                or 0
+            )
     # reasoning_tokens is a subset of completion_tokens (see comment above), so make
     # them disjoint here — the frontend buckets reasoning separately and would
     # double-count if output_tokens still included it.

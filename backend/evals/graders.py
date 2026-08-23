@@ -5,6 +5,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+# One definition of order-preserving dedup; this logic used to live here
+# byte-for-byte identically to the copy in records.py.
+from backend.evals.records import dedupe_paths as _dedupe_keep_order
+
 GRADER_SYSTEM = "You are a strict evaluation grader. Respond with one JSON object only."
 
 
@@ -13,16 +17,6 @@ class GradeResult:
     score: float
     reasoning: str = ""
     extra: dict | None = None
-
-
-def _dedupe_keep_order(paths: list[str]) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for p in paths:
-        if p not in seen:
-            seen.add(p)
-            out.append(p)
-    return out
 
 
 def _top_k_deduped(retrieved_paths: list[str], k: int) -> list[str]:

@@ -157,9 +157,16 @@ def _chunk_parts(chunk: Any) -> list[Any]:
 
 
 def _norm_usage(u: Any) -> UsagePayload:
-    # Gemini thinking models report `thoughts_token_count` separately from
-    # `candidates_token_count`. Expose as reasoning_tokens so the UI can show
-    # the breakdown alongside other providers.
+    # Gemini already satisfies backend/usage.py's contract natively, so unlike
+    # the other two providers this function does no arithmetic. Do not "fix" it:
+    #
+    #   total = prompt_token_count + candidates_token_count + thoughts_token_count
+    #
+    # Thoughts are ALREADY disjoint from candidates, so subtracting reasoning out
+    # of output here (as Anthropic and OpenAI must, because their APIs roll it in)
+    # would double-discount it. And cached_content_token_count is already a subset
+    # of prompt_token_count, which is exactly the semantics the contract wants.
+    # Pinned by test_gemini_reasoning_disjoint_from_output.
     return {
         "input_tokens": getattr(u, "prompt_token_count", 0) or 0,
         "output_tokens": getattr(u, "candidates_token_count", 0) or 0,

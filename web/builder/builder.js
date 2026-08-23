@@ -2,9 +2,6 @@
 // Talks to the gated /api/builder/* write API (backend/builder.py) plus the
 // existing read-only /api/tools, /api/profiles, /api/models, /api/chat.
 
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-const API_BASE_KEY = "easyagent-dashboard-api-base";
-
 // Only these tools are shown to non-technical builders; everything else in
 // the registry (semantic_search_kb, get_resume_summary, get_project_context)
 // stays hidden.
@@ -75,22 +72,6 @@ let state = {
 
 // ---------- API base (same localStorage pattern as web/app.js) ----------
 
-function defaultApiBase() {
-  return LOCAL_HOSTS.has(window.location.hostname) ? "http://127.0.0.1:8001" : "";
-}
-
-function apiBase() {
-  return (els.apiBase.value || "").trim().replace(/\/$/, "");
-}
-
-function saveApiBase() {
-  localStorage.setItem(API_BASE_KEY, apiBase());
-}
-
-function loadApiBase() {
-  els.apiBase.value = localStorage.getItem(API_BASE_KEY) || defaultApiBase();
-}
-
 function ownerToken() {
   let t = localStorage.getItem("easyagent-builder-owner");
   if (!t) {
@@ -127,16 +108,6 @@ function extractDetail(data) {
   }
   if (data.detail) return JSON.stringify(data.detail);
   return "";
-}
-
-function showError(message) {
-  els.loadError.textContent = message;
-  els.loadError.classList.remove("hidden");
-}
-
-function clearError() {
-  els.loadError.textContent = "";
-  els.loadError.classList.add("hidden");
 }
 
 function renderStatus(el, ok, message) {

@@ -1,8 +1,5 @@
 // EasyAgent technical dashboard — read-only view of runtime state via REST APIs.
 
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-const API_BASE_KEY = "easyagent-dashboard-api-base";
-
 const ENDPOINTS = [
   { method: "GET", path: "/api/status", note: "Aggregated runtime, budget, limits, registry" },
   { method: "GET", path: "/api/health", note: "Liveness and active session count" },
@@ -40,46 +37,6 @@ let state = {
   defaultProfile: "",
   profiles: [],
 };
-
-function defaultApiBase() {
-  return LOCAL_HOSTS.has(window.location.hostname) ? "http://127.0.0.1:8001" : "";
-}
-
-function apiBase() {
-  const value = (els.apiBase.value || "").trim().replace(/\/$/, "");
-  return value;
-}
-
-function saveApiBase() {
-  localStorage.setItem(API_BASE_KEY, apiBase());
-}
-
-function loadApiBase() {
-  els.apiBase.value = localStorage.getItem(API_BASE_KEY) || defaultApiBase();
-}
-
-async function fetchJson(path) {
-  const base = apiBase();
-  if (!base) {
-    throw new Error("Set an API base URL (e.g. http://127.0.0.1:8001)");
-  }
-  const res = await fetch(`${base}${path}`);
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`${path} → ${res.status} ${detail.slice(0, 180)}`);
-  }
-  return res.json();
-}
-
-function showError(message) {
-  els.loadError.textContent = message;
-  els.loadError.classList.remove("hidden");
-}
-
-function clearError() {
-  els.loadError.textContent = "";
-  els.loadError.classList.add("hidden");
-}
 
 function fmtNumber(value) {
   return new Intl.NumberFormat().format(Number(value) || 0);
@@ -241,14 +198,6 @@ function renderEndpoints() {
       item.path
     )}</code> — ${escapeHtml(item.note)}</span></li>`
   ).join("");
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 async function loadProfileDetail(profileId) {

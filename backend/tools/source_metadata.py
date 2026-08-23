@@ -102,15 +102,8 @@ def _source_item(label: str, kind: str) -> dict[str, str]:
 
 
 def _unique_items(items: list[dict[str, str]]) -> list[dict[str, str]]:
-    seen: set[tuple[str, str]] = set()
-    out: list[dict[str, str]] = []
-    for item in items:
-        key = (item["label"], item["kind"])
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(item)
-    return out
+    """Drop items repeating a (label, kind) pair, keeping first-seen order."""
+    return list({(i["label"], i["kind"]): i for i in items}.values())
 
 
 def _cap_items(items: list[dict[str, str]]) -> tuple[list[dict[str, str]], int]:

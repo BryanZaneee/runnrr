@@ -34,13 +34,8 @@ def recall_metric(metrics: dict[str, Any]) -> float | None:
 
 
 def dedupe_paths(paths: list[str]) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for p in paths:
-        if p not in seen:
-            seen.add(p)
-            out.append(p)
-    return out
+    """Drop duplicate paths, keeping first-seen order."""
+    return list(dict.fromkeys(paths))
 
 
 def zero_tokens() -> dict[str, int]:

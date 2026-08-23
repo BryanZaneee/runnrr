@@ -5,6 +5,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from backend.evals.records import dedupe_paths
+
 GRADER_SYSTEM = "You are a strict evaluation grader. Respond with one JSON object only."
 
 
@@ -15,18 +17,8 @@ class GradeResult:
     extra: dict | None = None
 
 
-def _dedupe_keep_order(paths: list[str]) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for p in paths:
-        if p not in seen:
-            seen.add(p)
-            out.append(p)
-    return out
-
-
 def _top_k_deduped(retrieved_paths: list[str], k: int) -> list[str]:
-    return _dedupe_keep_order(retrieved_paths)[:k]
+    return dedupe_paths(retrieved_paths)[:k]
 
 
 def grade_recall_at_k(
@@ -36,7 +28,7 @@ def grade_recall_at_k(
     k: int = 5,
 ) -> GradeResult:
     """Recall@k: fraction of unique expected paths present in deduped top-k retrieved."""
-    expected_unique = _dedupe_keep_order(list(expected_paths))
+    expected_unique = dedupe_paths(list(expected_paths))
     if not expected_unique:
         return GradeResult(1.0, "no expected paths; vacuously satisfied")
 
@@ -61,7 +53,7 @@ def grade_context_precision(
     if not topk:
         return GradeResult(0.0, "no retrieved context")
 
-    expected_set = set(_dedupe_keep_order(list(expected_paths)))
+    expected_set = set(dedupe_paths(list(expected_paths)))
     hits = sum(1 for p in topk if p in expected_set)
     score = hits / len(topk)
     return GradeResult(
@@ -74,11 +66,11 @@ def reciprocal_rank(
     retrieved_paths: list[str], expected_paths: list[str]
 ) -> float:
     """Reciprocal rank of the first relevant path in deduped retrieval order."""
-    expected_set = set(_dedupe_keep_order(list(expected_paths)))
+    expected_set = set(dedupe_paths(list(expected_paths)))
     if not expected_set:
         return 1.0
 
-    for rank, path in enumerate(_dedupe_keep_order(retrieved_paths), start=1):
+    for rank, path in enumerate(dedupe_paths(retrieved_paths), start=1):
         if path in expected_set:
             return 1.0 / rank
     return 0.0

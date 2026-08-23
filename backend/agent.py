@@ -6,6 +6,7 @@ LLMProvider so the same loop covers Anthropic + OpenAI/Moonshot.
 from __future__ import annotations
 
 import logging
+import time
 from typing import AsyncIterator
 
 from backend.config import MAX_TOKENS, MAX_TOOL_HOPS
@@ -23,6 +24,7 @@ async def run_conversation_stream(
     provider: LLMProvider,
     model: str,
     profile: AgentProfile | None = None,
+    turn_id: str = "",
 ) -> AsyncIterator[dict]:
     """Run one user turn through the agent. Yields SSE-shaped event dicts.
 
@@ -37,6 +39,7 @@ async def run_conversation_stream(
     # client (rather than run_tool). Out of scope for this task — the schema is
     # parsed and stored on AgentProfile.mcp_servers, but no client connects yet.
     for hop in range(MAX_TOOL_HOPS):
+        hop_started = time.perf_counter()
         tool_calls_pending: list[dict] = []
         stop_reason: str = "end_turn"
         pending_usage: dict | None = None
@@ -69,14 +72,23 @@ async def run_conversation_stream(
                 elif t == "error":
                     yield {"event": "error", "message": ev.get("text", "provider error")}
                     return
-        except Exception:
+        except Exception as exc:
             # SDK/network failures (auth, timeout, disconnect) become one sanitized
             # error event instead of an exception escaping the SSE stream. Accepted
             # edge: the session may end with a trailing user message and no
             # assistant turn — all three provider APIs tolerate that on the next
             # request.
             log.exception(
-                "provider stream failed", extra={"model": model, "hop": hop}
+                "provider stream failed",
+                extra={
+                    # Without turn_id/profile this line could not be joined to the
+                    # chat_complete record for the same turn.
+                    "turn_id": turn_id,
+                    "model": model,
+                    "profile": profile.id,
+                    "hop": hop,
+                    "error_class": type(exc).__name__,
+                },
             )
             if pending_usage is not None:
                 # Tokens already consumed still count against the daily budget.
@@ -84,6 +96,7 @@ async def run_conversation_stream(
                     "event": "usage",
                     "category": "tools" if tool_calls_pending else "response",
                     "hop": hop,
+                    "hop_ms": int((time.perf_counter() - hop_started) * 1000),
                     "had_thinking": had_thinking,
                     **pending_usage,
                 }
@@ -101,6 +114,7 @@ async def run_conversation_stream(
                 "event": "usage",
                 "category": category,
                 "hop": hop,
+                "hop_ms": int((time.perf_counter() - hop_started) * 1000),
                 "had_thinking": had_thinking,
                 **pending_usage,
             }
@@ -131,6 +145,7 @@ async def run_conversation_stream(
                 "source_items": r.source_items,
                 "source_count": r.source_count,
                 "hidden_count": r.hidden_count,
+                "duration_ms": r.duration_ms,
             }
             if r.rag_trace:
                 payload["rag_trace"] = r.rag_trace

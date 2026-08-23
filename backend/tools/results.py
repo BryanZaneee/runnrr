@@ -20,6 +20,7 @@ class ToolResult:
     source_count: int = 0
     hidden_count: int = 0
     rag_trace: dict | None = None
+    duration_ms: int | None = None
 
 
 def _tool_result(

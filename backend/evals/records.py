@@ -5,6 +5,8 @@ backend.evals.retrieval and backend.evals.e2e can depend on it without cycles.
 """
 from __future__ import annotations
 
+from backend.usage import zero_tokens as _zero_tokens
+
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -38,8 +40,9 @@ def dedupe_paths(paths: list[str]) -> list[str]:
     return list(dict.fromkeys(paths))
 
 
-def zero_tokens() -> dict[str, int]:
-    return {"input": 0, "output": 0, "cache_read": 0, "reasoning": 0}
+# Re-exported so eval records and the chat path can never drift apart.
+# The canonical definition (and the semantics) live in backend/usage.py.
+zero_tokens = _zero_tokens
 
 
 def _avg_optional(values: list[float]) -> float | None:

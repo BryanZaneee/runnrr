@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -27,6 +28,8 @@ from slowapi.errors import RateLimitExceeded
 from backend import builder, config
 from backend.agent import run_conversation_stream
 from backend.budget import TOKEN_BUDGET
+from backend.pricing import cost_usd
+from backend.usage import billable_total, tally, zero_tokens
 from backend.config import (
     ALLOWED_ORIGINS,
     DEFAULT_MODEL,
@@ -311,6 +314,7 @@ async def chat(request: Request, req: ChatRequest) -> StreamingResponse:
     if req.session_id not in SESSIONS and len(SESSIONS) >= MAX_ACTIVE_SESSIONS:
         raise HTTPException(status_code=503, detail="server at session capacity")
 
+    turn_id = uuid.uuid4().hex[:12]
     provider = get_provider(req.model)
     cfg = MODEL_REGISTRY[req.model]
     profile = get_profile(req.profile)
@@ -340,6 +344,7 @@ async def chat(request: Request, req: ChatRequest) -> StreamingResponse:
         session_id=req.session_id,
         model_id=req.model,
         profile_id=profile.id,
+        turn_id=turn_id,
     )
 
     return StreamingResponse(
@@ -356,46 +361,76 @@ async def _instrument(
     session_id: str,
     model_id: str,
     profile_id: str,
+    turn_id: str,
 ) -> AsyncIterator[dict]:
-    """Pass events through; tally usage for the budget and emit one structured log."""
-    started = time.time()
-    tokens_in = 0
-    tokens_out = 0
-    cache_read = 0
-    tool_hops = 0
+    """Pass events through; tally usage for the budget and emit one structured log.
+
+    `chat_complete` has an out-of-repo consumer (the production chat UI lives in
+    bryanzane_v3/easyagent), so fields here are ADDED, never renamed or removed.
+    `tool_hops` is kept for that reason even though `tool_calls` supersedes it.
+    """
+    started = time.perf_counter()
+    tokens = zero_tokens()
+    ttft_ms: int | None = None
+    hops = 0
+    tool_calls = 0
+    estimated_usage = False
     status = "ok"
+    error_class: str | None = None
     try:
         async for ev in events:
             kind = ev.get("event")
             if kind == "usage":
-                tokens_in += int(ev.get("input_tokens") or 0)
-                tokens_out += int(ev.get("output_tokens") or 0)
-                cache_read += int(ev.get("cache_read_input_tokens") or 0)
-            elif kind == "tool_use_start":
-                tool_hops += 1
+                tally(tokens, ev)
+                # Exactly one usage event per hop (see agent.run_conversation_stream),
+                # which makes this a real hop count. The old `tool_hops` counted
+                # tool_use_start events, so a hop calling three tools logged 3 —
+                # and two providers dedupe that event by tool name, so the number
+                # also differed per provider for identical work.
+                hops += 1
+                if ev.get("estimated"):
+                    estimated_usage = True
+            elif kind == "tool_result":
+                tool_calls += 1
+            elif kind in ("delta", "thinking_delta") and ttft_ms is None:
+                ttft_ms = int((time.perf_counter() - started) * 1000)
             elif kind == "error":
                 status = "error"
+                error_class = error_class or "stream_error"
             yield ev
-    except Exception:
+    except Exception as exc:
         status = "exception"
+        error_class = type(exc).__name__
         raise
     finally:
-        total = tokens_in + tokens_out
+        total = billable_total(tokens)
         TOKEN_BUDGET.record(total)
         log.info(
             "chat_complete",
             extra={
                 "ip": ip,
+                "turn_id": turn_id,
                 "session": session_id[:8],
                 "model": model_id,
                 "profile": profile_id,
-                "tokens_in": tokens_in,
-                "tokens_out": tokens_out,
+                "tokens_in": tokens["input"],
+                "tokens_out": tokens["output"],
+                # Reasoning was previously charged to nobody: both Anthropic and
+                # OpenAI subtract it out of output_tokens, and the old total was
+                # input + output only. Vendors bill it; now so do we.
+                "tokens_reasoning": tokens["reasoning"],
                 "tokens_total": total,
-                "cache_read": cache_read,
-                "tool_hops": tool_hops,
-                "duration_ms": int((time.time() - started) * 1000),
+                "cache_read": tokens["cache_read"],
+                "cache_write": tokens["cache_write"],
+                "cost_usd": cost_usd(model_id, tokens),
+                "usage_estimated": estimated_usage,
+                "ttft_ms": ttft_ms,
+                "hops": hops,
+                "tool_calls": tool_calls,
+                "tool_hops": tool_calls,  # deprecated alias; see docstring
+                "duration_ms": int((time.perf_counter() - started) * 1000),
                 "status": status,
+                "error_class": error_class,
             },
         )
 

@@ -15,7 +15,8 @@ from backend.evals.graders import (
     grade_faithfulness,
     grade_recall_at_k,
 )
-from backend.evals.records import build_record, zero_tokens
+from backend.evals.records import build_record
+from backend.usage import tally, zero_tokens
 from backend.evals.retrieval import EvalCaseSkipped, retrieve
 from backend.profiles import AgentProfile
 from backend.providers.registry import build_provider
@@ -42,10 +43,7 @@ def _reduce_events(events: list[dict]) -> tuple[str, list[str], dict[str, int]]:
             if name:
                 tool_calls.append(name)
         elif kind == "usage":
-            tokens["input"] += int(ev.get("input_tokens") or 0)
-            tokens["output"] += int(ev.get("output_tokens") or 0)
-            tokens["cache_read"] += int(ev.get("cache_read_input_tokens") or 0)
-            tokens["reasoning"] += int(ev.get("reasoning_tokens") or 0)
+            tally(tokens, ev)
     return "".join(answer_parts), tool_calls, tokens
 
 

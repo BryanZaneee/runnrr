@@ -98,6 +98,15 @@ def _score_from(raw: Any) -> tuple[float, str]:
     return normalized, reasoning
 
 
+def _rubric_grade(
+    prompt: str, grade_fn: Callable[[str], Any] | None
+) -> GradeResult:
+    """Run one rubric prompt through the grader and normalize its 0-10 score."""
+    raw = (grade_fn or _default_grade_fn)(prompt)
+    score, reasoning = _score_from(raw)
+    return GradeResult(score, reasoning, extra=raw if isinstance(raw, dict) else None)
+
+
 def grade_faithfulness(
     answer: str,
     context: str,
@@ -105,18 +114,13 @@ def grade_faithfulness(
     grade_fn: Callable[[str], Any] | None = None,
 ) -> GradeResult:
     """Is the answer supported by the retrieved context?"""
-    gf = grade_fn or _default_grade_fn
-    prompt = (
+    return _rubric_grade(
         "Rate whether the answer is fully supported by the context (0=no support, "
         "10=fully supported).\n"
         f'Context:\n"""\n{context}\n"""\n'
         f'Answer:\n"""\n{answer}\n"""\n'
-        'Respond with JSON: {"score": <0-10>, "reasoning": "<brief>"}'
-    )
-    raw = gf(prompt)
-    score, reasoning = _score_from(raw)
-    return GradeResult(
-        score, reasoning, extra=raw if isinstance(raw, dict) else None
+        'Respond with JSON: {"score": <0-10>, "reasoning": "<brief>"}',
+        grade_fn,
     )
 
 
@@ -127,18 +131,13 @@ def grade_answer_relevance(
     grade_fn: Callable[[str], Any] | None = None,
 ) -> GradeResult:
     """Does the answer address the query?"""
-    gf = grade_fn or _default_grade_fn
-    prompt = (
+    return _rubric_grade(
         "Rate how well the answer addresses the query (0=irrelevant, 10=fully "
         "addresses).\n"
         f'Query:\n"""\n{query}\n"""\n'
         f'Answer:\n"""\n{answer}\n"""\n'
-        'Respond with JSON: {"score": <0-10>, "reasoning": "<brief>"}'
-    )
-    raw = gf(prompt)
-    score, reasoning = _score_from(raw)
-    return GradeResult(
-        score, reasoning, extra=raw if isinstance(raw, dict) else None
+        'Respond with JSON: {"score": <0-10>, "reasoning": "<brief>"}',
+        grade_fn,
     )
 
 
@@ -156,16 +155,11 @@ def grade_answer_vs_ground_truth(
     if not ground_truth.strip():
         return GradeResult(0.0, "no ground truth")
 
-    gf = grade_fn or _default_grade_fn
-    prompt = (
+    return _rubric_grade(
         "Rate semantic equivalence of the answer to the reference (0=no match, "
         "10=equivalent meaning).\n"
         f'Reference:\n"""\n{ground_truth}\n"""\n'
         f'Answer:\n"""\n{answer}\n"""\n'
-        'Respond with JSON: {"score": <0-10>, "reasoning": "<brief>"}'
-    )
-    raw = gf(prompt)
-    score, reasoning = _score_from(raw)
-    return GradeResult(
-        score, reasoning, extra=raw if isinstance(raw, dict) else None
+        'Respond with JSON: {"score": <0-10>, "reasoning": "<brief>"}',
+        grade_fn,
     )

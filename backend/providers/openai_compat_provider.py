@@ -111,7 +111,6 @@ class OpenAICompatProvider:
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
         tool_calls: dict[int, dict[str, Any]] = {}
-        announced_tool_names: set[str] = set()
         stop_reason = "end_turn"
         usage: UsagePayload | None = None
 
@@ -168,9 +167,12 @@ class OpenAICompatProvider:
                         continue
                     name = getattr(fn, "name", None)
                     if name:
+                        # One event per CALL. Deduping by name under-reported a
+                        # hop that called the same tool twice, so identical work
+                        # looked different here than on Anthropic.
+                        first_name = not acc["function"]["name"]
                         acc["function"]["name"] = name
-                        if name not in announced_tool_names:
-                            announced_tool_names.add(name)
+                        if first_name:
                             yield {"type": "tool_use_start", "name": name}
                     args = getattr(fn, "arguments", None)
                     if args:

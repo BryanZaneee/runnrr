@@ -23,8 +23,12 @@ _EPHEMERAL = {"type": "ephemeral"}
 
 
 class AnthropicProvider:
-    def __init__(self, *, thinking_budget: int | None = None) -> None:
-        self.client = AsyncAnthropic(
+    def __init__(
+        self, *, thinking_budget: int | None = None, client: Any | None = None
+    ) -> None:
+        # `client=` matches OpenAICompatProvider and GeminiProvider. Anthropic
+        # lacked it, which is why Anthropic streaming was the one untested path.
+        self.client = client or AsyncAnthropic(
             api_key=os.environ["ANTHROPIC_API_KEY"],
             timeout=PROVIDER_TIMEOUT_SECONDS,
             # The SDK honours Retry-After on 429/5xx. There was no retry at any

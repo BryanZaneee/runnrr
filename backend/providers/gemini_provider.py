@@ -1,7 +1,6 @@
 """Gemini provider using Google's official google-genai SDK."""
 from __future__ import annotations
 
-import json
 import os
 from typing import Any, AsyncIterator
 
@@ -13,6 +12,9 @@ from backend.profiles import AgentProfile
 from backend.providers.base import Event
 from backend.tools import ToolResult, schemas_for_tools
 from backend.types import ProviderMessage, UsagePayload
+
+# Finishes where the answer is incomplete for a reason the user needs to know.
+_BLOCKED_FINISHES = frozenset({"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT"})
 
 
 class GeminiProvider:
@@ -83,8 +85,8 @@ class GeminiProvider:
 
         text_parts: list[str] = []
         function_parts: list[Any] = []
-        announced_tool_names: set[str] = set()
         usage: UsagePayload | None = None
+        finish_reason: str | None = None
 
         async for chunk in response_stream:
             text = _chunk_text(chunk)
@@ -96,14 +98,21 @@ class GeminiProvider:
             if usage_obj is not None:
                 usage = _norm_usage(usage_obj)
 
+            for candidate in getattr(chunk, "candidates", None) or []:
+                fr = getattr(candidate, "finish_reason", None)
+                if fr is not None:
+                    finish_reason = getattr(fr, "name", None) or str(fr)
+
             for part in _chunk_parts(chunk):
                 fc = getattr(part, "function_call", None)
                 if fc is None:
                     continue
                 function_parts.append(part)
                 name = getattr(fc, "name", "") or ""
-                if name and name not in announced_tool_names:
-                    announced_tool_names.add(name)
+                if name:
+                    # One event per CALL, not per distinct name. Deduping by name
+                    # meant two read_file calls in one hop announced once, so the
+                    # same workload reported differently than on Anthropic.
                     yield {"type": "tool_use_start", "name": name}
 
         model_parts = []
@@ -125,18 +134,35 @@ class GeminiProvider:
 
         if usage is not None:
             yield {"type": "usage", "usage": usage}
-        yield {
-            "type": "message_done",
-            "stop_reason": "tool_use" if function_parts else "end_turn",
-        }
+
+        # stop_reason used to be inferred purely from content: "tool_use" if any
+        # function parts, else "end_turn". That reported a MAX_TOKENS truncation,
+        # a SAFETY block, or a RECITATION stop as a clean completion -- the user
+        # saw a half-answer with no indication anything went wrong, and the other
+        # two providers read the real field. Blocked finishes are surfaced on the
+        # `error` event, which existed for exactly this and had no producer.
+        if function_parts:
+            stop_reason = "tool_use"
+        elif finish_reason in _BLOCKED_FINISHES:
+            yield {
+                "type": "error",
+                "text": f"the model stopped early ({finish_reason.lower()})",
+            }
+            return
+        elif finish_reason == "MAX_TOKENS":
+            stop_reason = "max_tokens"
+        else:
+            stop_reason = "end_turn"
+        yield {"type": "message_done", "stop_reason": stop_reason}
 
 
+# Gemini requires a dict response, but the shape must match what Anthropic and
+# OpenAI show the model for the same tool -- they pass the raw string through.
+# Parsing and re-wrapping meant the model saw structurally different tool output
+# per provider for identical work, which quietly invalidates any cross-model
+# eval comparison.
 def _response_dict(content: str) -> dict[str, Any]:
-    try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
-        return {"content": content}
-    return parsed if isinstance(parsed, dict) else {"result": parsed}
+    return {"content": content}
 
 
 def _chunk_text(chunk: Any) -> str:

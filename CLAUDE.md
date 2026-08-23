@@ -82,7 +82,7 @@ Providers under [`backend/providers/`](backend/providers/):
 - `openai_compat_provider.py` — uses `openai.AsyncOpenAI` with configurable `base_url`. **One class** covers both OpenAI and Moonshot Kimi K2.6.
 - `gemini_provider.py` — uses `google-genai` async streaming with manual function-call handling.
 
-`MODEL_REGISTRY` in [`backend/config.py`](backend/config.py) maps `model_id` → `{provider, model, base_url, ...}`. `REGISTERED_PROVIDERS` in [`backend/app.py`](backend/app.py) gates which models the dropdown shows based on what's actually wired up. `available_models()` further filters by which provider API keys are present in env, so the same registry produces a different dropdown on dev vs. prod.
+`MODEL_REGISTRY` in [`backend/config.py`](backend/config.py) maps `model_id` → `{provider, model, base_url, capabilities, ...}`. **It is the capability lookup — widen the dict rather than wrapping it in a resolver.** Every entry must declare `context_window`, `max_output_tokens`, and the four `supports_*` flags; a test enforces that so the registry cannot rot when a model is added. A capability the resolved provider cannot honor raises `ProviderSetupError` at construction time rather than being silently dropped. `REGISTERED_PROVIDERS` in [`backend/app.py`](backend/app.py) gates which models the dropdown shows based on what's actually wired up. `available_models()` further filters by which provider API keys are present in env, so the same registry produces a different dropdown on dev vs. prod.
 
 Agent persona and KB root are loaded from [`profiles/`](profiles/) through [`backend/profiles.py`](backend/profiles.py), so the engine can be reused for another agent by adding a profile package instead of forking the loop. `AgentProfile` carries: `id`, `label`, `description`, `kb_root`, `system_prompt`, `welcome`, `suggestions`, `tools`, `tool_descriptions`, `brand`, `data_root` (optional, profile-local data dir), `mcp_servers` (parsed but not yet connected), and the source-attribution config `project_aliases`, `source_labels`, and `source_path_labels` (ordered `(match, label)` pairs mapping KB paths to public labels; a trailing `/` is a prefix match, else exact). The engine ships **no** business-specific path-label rules — they live in profile JSON.
 
@@ -148,9 +148,9 @@ The agent loop normalizes provider events to: `text_delta`, `thinking_delta`, `t
 - ✅ **Phase A**: `kb_loader.py` + `tools.py` + 32 unit tests
 - ✅ **Phase B**: `AnthropicProvider` + provider-agnostic loop + 4 mocked-provider tests
 - ✅ **Phase C**: FastAPI SSE + chat UI + 5 endpoint tests
-- ✅ **Phase D**: `OpenAICompatProvider` + `tool_translator.py` + Kimi K2.6 / GPT-5 wiring
+- ✅ **Phase D**: `OpenAICompatProvider` + Kimi K2.6 / GPT-5 wiring (schema translation is inline per provider; the old `tool_translator.py` no longer exists)
 - ✅ **Profile split**: reusable engine (EasyAgent) + `profiles/personal-agent/` persona and KB root
-- ⏳ **Phase E**: prompt caching / usage overlay across providers
+- ✅ **Phase E**: Anthropic prompt caching (system + last-tool breakpoints) and normalized usage/cost accounting across providers
 - ⏳ **Phase F**: populate a local/private `kb/` (resume, quick_info, project pitches, meta) + smoke prompts
 - ✅ **Phase G**: production hardening — per-IP `slowapi` rate limit on `/api/chat`, `TOKEN_BUDGET` daily cap with `/api/budget` introspection, `MAX_ACTIVE_SESSIONS` cap with lazy stale-session sweep, JSON-line structured logs via `_instrument()` per chat completion
 - ✅ **Customer-service profile + agent switcher**: bundled `profiles/customer-service/` (Lantern Lane Coffee) + `mcp_servers` schema field on `AgentProfile` (parsed; full MCP integration deferred) + `GET /api/profiles` endpoint + web UI agent switcher dropdown and details panel showing description, tools, MCP servers, and per-turn classified token usage

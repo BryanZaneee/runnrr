@@ -5,11 +5,12 @@ LLMProvider so the same loop covers Anthropic + OpenAI/Moonshot.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import AsyncIterator
 
-from backend.config import MAX_TOKENS, MAX_TOOL_HOPS
+from backend.config import MAX_PARALLEL_TOOLS, MAX_TOKENS, MAX_TOOL_HOPS
 from backend.profiles import AgentProfile, load_profile
 from backend.providers.base import LLMProvider
 from backend.tools import run_tool
@@ -31,6 +32,9 @@ async def run_conversation_stream(
     Mutates session["messages"] across the conversation. Hard-bounded by MAX_TOOL_HOPS.
     """
     profile = profile or load_profile()
+    # Bounded so a max-width hop cannot exhaust the default thread pool, which is
+    # shared process-wide and would then stall unrelated requests.
+    tool_slots = asyncio.Semaphore(MAX_PARALLEL_TOOLS)
     session["messages"].append(provider.format_user(user_message))
 
     # TODO(mcp): if profile.mcp_servers is non-empty, spawn stdio MCP clients on
@@ -38,6 +42,14 @@ async def run_conversation_stream(
     # catalog, and dispatch matching tool_use_complete events through the MCP
     # client (rather than run_tool). Out of scope for this task — the schema is
     # parsed and stored on AgentProfile.mcp_servers, but no client connects yet.
+    # Built once per turn, not once per hop. AgentProfile is frozen and immutable
+    # within a turn, so rebuilding was pure waste: a deepcopy per overridden schema
+    # and, on Gemini, a full FunctionDeclaration reconstruction every hop. The
+    # bigger win is prefix stability -- one object identity across all hops is what
+    # keeps the prompt cache warm.
+    system_block = provider.system_for_provider(profile)
+    tool_schemas = provider.tools_for_provider(profile)
+
     for hop in range(MAX_TOOL_HOPS):
         hop_started = time.perf_counter()
         tool_calls_pending: list[dict] = []
@@ -49,8 +61,8 @@ async def run_conversation_stream(
             async for ev in provider.stream(
                 model=model,
                 messages=session["messages"],
-                system=provider.system_for_provider(profile),
-                tools=provider.tools_for_provider(profile),
+                system=system_block,
+                tools=tool_schemas,
                 max_tokens=MAX_TOKENS,
             ):
                 t = ev.get("type")
@@ -123,18 +135,41 @@ async def run_conversation_stream(
             yield {"event": "done", "stop_reason": stop_reason}
             return
 
-        results = [
-            run_tool(
-                tc["name"],
-                tc["arguments"],
-                tc["tool_use_id"],
-                root=profile.kb_root,
-                data_root=profile.data_root,
-                profile=profile,
-                allowed_tools=profile.tools,
-            )
-            for tc in tool_calls_pending
-        ]
+        # asyncio.to_thread keeps every handler synchronous while getting the
+        # blocking work off the event loop. That work is real: sync httpx calls
+        # in web_search and web_fetch, time.sleep in the Voyage backoff, and a
+        # synchronous Anthropic round-trip inside the RAG reranker. On the single
+        # uvicorn worker, one of those used to stall every other in-flight stream.
+        #
+        # gather runs the calls in one hop concurrently AND preserves input order,
+        # which matters beyond latency: the order of append_tool_results decides
+        # the message log, and a stable message log is what keeps the prompt
+        # prefix cacheable.
+        async def _run_one(tc: dict):
+            async with tool_slots:
+                return await asyncio.to_thread(
+                    run_tool,
+                    tc["name"],
+                    tc["arguments"],
+                    tc["tool_use_id"],
+                    root=profile.kb_root,
+                    data_root=profile.data_root,
+                    profile=profile,
+                    allowed_tools=profile.tools,
+                )
+
+        results = list(
+            await asyncio.gather(*(_run_one(tc) for tc in tool_calls_pending))
+        )
+
+        # Append BEFORE yielding. If the client disconnects mid-yield, GeneratorExit
+        # propagates and anything after the yields never runs -- which used to leave
+        # an assistant tool_use turn with no matching tool_result, and every later
+        # request on that session_id 400s on Anthropic and OpenAI for the full
+        # 30-minute session TTL. The messages do not depend on the yields, so
+        # ordering them first is the whole fix.
+        provider.append_tool_results(session["messages"], results)
+
         for r in results:
             payload = {
                 "event": "tool_result",
@@ -150,6 +185,5 @@ async def run_conversation_stream(
             if r.rag_trace:
                 payload["rag_trace"] = r.rag_trace
             yield payload
-        provider.append_tool_results(session["messages"], results)
 
     yield {"event": "error", "message": f"hit MAX_TOOL_HOPS={MAX_TOOL_HOPS}"}

@@ -114,3 +114,19 @@ def parse_sse():
         return events
 
     return _parse
+
+
+@pytest.fixture(autouse=True)
+def reset_provider_cache():
+    """Drop cached providers between tests.
+
+    Providers are memoized per model_id so the SDK client (and its connection
+    pool) is reused across turns. The async clients bind their transport to the
+    event loop they are first used on, and TestClient runs each request through a
+    fresh loop, so a provider leaking across tests would fail on the second use.
+    """
+    from backend.providers.registry import clear_provider_cache
+
+    clear_provider_cache()
+    yield
+    clear_provider_cache()

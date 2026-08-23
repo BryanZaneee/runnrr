@@ -9,6 +9,7 @@ from backend.tools.definitions import ToolContext, ToolDef, ToolHandler
 from backend.tools.kb import KB_TOOL_DEFS
 from backend.tools.personal_kb import PERSONAL_KB_TOOL_DEFS
 from backend.tools.sales import SALES_TOOL_DEFS
+from backend.tools.skills_tool import READ_SKILL_TOOL
 from backend.tools.source_metadata import default_metadata, unavailable_metadata
 from backend.tools.web_fetch import FETCH_URL_TEXT_TOOL
 from backend.tools.web_search_tool import WEB_SEARCH_TOOL
@@ -25,6 +26,7 @@ TOOL_DEFS: tuple[ToolDef, ...] = (
     WEB_SEARCH_TOOL,
     FETCH_URL_TEXT_TOOL,
     CALCULATOR_TOOL,
+    READ_SKILL_TOOL,
     *SALES_TOOL_DEFS,
 )
 TOOL_DEFS_BY_NAME: dict[str, ToolDef] = {tool.name: tool for tool in TOOL_DEFS}

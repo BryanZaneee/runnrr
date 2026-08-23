@@ -48,6 +48,7 @@
         <div class="tab-row" role="tablist">
           <button type="button" class="tab-btn is-active" id="tab-setup-btn" role="tab" aria-selected="true">Setup</button>
           <button type="button" class="tab-btn" id="tab-kb-btn" role="tab" aria-selected="false">Knowledge</button>
+          <button type="button" class="tab-btn" id="tab-skills-btn" role="tab" aria-selected="false">Skills</button>
         </div>
 
         <div id="tab-setup" class="tab-panel">
@@ -116,6 +117,39 @@
                   <button type="button" id="save-note-btn" class="btn">Save note</button>
                   <button type="button" id="delete-note-btn" class="btn btn-danger">Delete note</button>
                   <p id="note-status" class="save-status hidden"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="tab-skills" class="tab-panel hidden">
+          <div class="kb-layout">
+            <div class="kb-list-col">
+              <button type="button" id="new-skill-btn" class="btn btn-secondary">New skill</button>
+              <ul id="skills-list" class="notes-list"></ul>
+              <p id="skills-empty" class="field-hint hidden">Knowledge is what your agent <em>knows</em>. A skill is something it <em>does</em> — a task with steps to follow.</p>
+            </div>
+            <div class="kb-editor-col">
+              <p id="skill-empty-state" class="field-hint">Pick a skill on the left, or add a new one.</p>
+              <div id="skill-editor-wrap" class="hidden">
+                <label class="field">
+                  <span>What is this task called?</span>
+                  <input type="text" id="skill-name" maxlength="80" placeholder="Handling a refund request" />
+                </label>
+                <label class="field">
+                  <span>When should your agent use it?</span>
+                  <input type="text" id="skill-description" maxlength="200" placeholder="When someone asks for a refund or their money back" />
+                  <small class="field-hint">Your agent reads this to decide when the steps apply, so be specific about the situation.</small>
+                </label>
+                <label class="field">
+                  <span>What should it do?</span>
+                  <textarea id="skill-steps" rows="12" placeholder="1. Ask for the order number.&#10;2. Check the order is less than 30 days old.&#10;3. If it is, tell them the refund takes 3-5 days.&#10;4. If it is older, offer store credit instead."></textarea>
+                  <small class="field-hint">Write it the way you would explain it to a new employee.</small>
+                </label>
+                <div class="save-row">
+                  <button type="button" id="save-skill-btn" class="btn">Save skill</button>
+                  <button type="button" id="delete-skill-btn" class="btn btn-danger">Delete skill</button>
+                  <p id="skill-status" class="save-status hidden"></p>
                 </div>
               </div>
             </div>

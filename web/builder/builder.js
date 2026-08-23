@@ -32,6 +32,19 @@ const els = {
   tabKbBtn: document.getElementById("tab-kb-btn"),
   tabSetup: document.getElementById("tab-setup"),
   tabKb: document.getElementById("tab-kb"),
+  tabSkillsBtn: document.getElementById("tab-skills-btn"),
+  tabSkills: document.getElementById("tab-skills"),
+  newSkillBtn: document.getElementById("new-skill-btn"),
+  skillsList: document.getElementById("skills-list"),
+  skillsEmpty: document.getElementById("skills-empty"),
+  skillEmptyState: document.getElementById("skill-empty-state"),
+  skillEditorWrap: document.getElementById("skill-editor-wrap"),
+  skillName: document.getElementById("skill-name"),
+  skillDescription: document.getElementById("skill-description"),
+  skillSteps: document.getElementById("skill-steps"),
+  saveSkillBtn: document.getElementById("save-skill-btn"),
+  deleteSkillBtn: document.getElementById("delete-skill-btn"),
+  skillStatus: document.getElementById("skill-status"),
   name: document.getElementById("f-name"),
   slugHint: document.getElementById("slug-hint"),
   description: document.getElementById("f-description"),
@@ -66,6 +79,8 @@ let state = {
   currentId: null,
   notes: [],
   selectedNotePath: null,
+  skills: [],
+  currentSkill: null,
   sessionId: crypto.randomUUID(),
   chatStreaming: false,
 };
@@ -296,18 +311,36 @@ function renderAgentSelect() {
 }
 
 async function classifyAgents(profiles) {
+  // `editable` used to be `probe.status === 200`, but read_profile deliberately
+  // returns 200 for bundled profiles so they are readable as examples. Every
+  // bundled profile therefore classified as editable, boot() loaded the first
+  // one as the default target, and a new user's very first save 409'd. The
+  // server already tells us: use its `readonly` flag.
   return Promise.all(
     profiles.map(async (p) => {
       const probe = await apiFetch(`/api/builder/profile/${encodeURIComponent(p.id)}`);
-      return { id: p.id, label: p.label, editable: probe.status === 200 };
+      if (probe.status !== 200) return { id: p.id, label: p.label, editable: false };
+      const body = await probe.json().catch(() => ({}));
+      return { id: p.id, label: p.label, editable: body.readonly === false };
     })
   );
 }
 
 async function refreshAgentList(selectId) {
-  const profilesPayload = await apiFetch("/api/profiles");
+  // Two sources: /api/profiles for the bundled read-only examples, and the
+  // owner-scoped builder listing for agents this token created. The latter is
+  // required because builder profiles are excluded from /api/profiles, so a
+  // just-saved agent was invisible in the builder's own picker.
+  const [profilesPayload, minePayload] = await Promise.all([
+    apiFetch("/api/profiles"),
+    apiFetch("/api/builder/profiles"),
+  ]);
   const profiles = (profilesPayload.data && profilesPayload.data.profiles) || [];
-  state.agents = await classifyAgents(profiles);
+  const mine = (minePayload.data && minePayload.data.profiles) || [];
+  state.agents = [
+    ...mine.map((p) => ({ id: p.id, label: p.label, editable: true })),
+    ...(await classifyAgents(profiles)),
+  ];
   renderAgentSelect();
   if (selectId && state.agents.some((a) => a.id === selectId)) {
     els.agentSelect.value = selectId;
@@ -452,14 +485,122 @@ function handleNewNote() {
 
 // ---------- Tabs ----------
 
+const TABS = [
+  ["setup", "tabSetupBtn", "tabSetup"],
+  ["kb", "tabKbBtn", "tabKb"],
+  ["skills", "tabSkillsBtn", "tabSkills"],
+];
+
 function switchTab(name) {
-  const isSetup = name === "setup";
-  els.tabSetupBtn.classList.toggle("is-active", isSetup);
-  els.tabKbBtn.classList.toggle("is-active", !isSetup);
-  els.tabSetupBtn.setAttribute("aria-selected", String(isSetup));
-  els.tabKbBtn.setAttribute("aria-selected", String(!isSetup));
-  els.tabSetup.classList.toggle("hidden", !isSetup);
-  els.tabKb.classList.toggle("hidden", isSetup);
+  for (const [id, btnKey, panelKey] of TABS) {
+    const active = id === name;
+    els[btnKey].classList.toggle("is-active", active);
+    els[btnKey].setAttribute("aria-selected", String(active));
+    els[panelKey].classList.toggle("hidden", !active);
+  }
+  if (name === "skills") refreshSkills();
+}
+
+// ---------- Skills tab ----------
+
+function slugifySkill(name) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+
+function renderSkillsList() {
+  els.skillsList.replaceChildren();
+  els.skillsEmpty.classList.toggle("hidden", state.skills.length > 0);
+  state.skills.forEach((s) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = s.name || s.slug;
+    btn.addEventListener("click", () => openSkill(s.slug));
+    li.appendChild(btn);
+    els.skillsList.appendChild(li);
+  });
+}
+
+async function refreshSkills() {
+  if (!state.currentId) {
+    state.skills = [];
+    renderSkillsList();
+    return;
+  }
+  const res = await apiFetch(`/api/builder/skills/${encodeURIComponent(state.currentId)}`);
+  state.skills = (res.data && res.data.skills) || [];
+  renderSkillsList();
+}
+
+function showSkillEditor(show) {
+  els.skillEditorWrap.classList.toggle("hidden", !show);
+  els.skillEmptyState.classList.toggle("hidden", show);
+}
+
+function newSkill() {
+  state.currentSkill = null;
+  els.skillName.value = "";
+  els.skillDescription.value = "";
+  els.skillSteps.value = "";
+  showSkillEditor(true);
+  els.skillName.focus();
+}
+
+async function openSkill(slug) {
+  const res = await apiFetch(
+    `/api/builder/skills/${encodeURIComponent(state.currentId)}/one?slug=${encodeURIComponent(slug)}`
+  );
+  if (res.status !== 200) return;
+  state.currentSkill = slug;
+  els.skillName.value = res.data.name || "";
+  els.skillDescription.value = res.data.description || "";
+  els.skillSteps.value = res.data.steps || "";
+  showSkillEditor(true);
+}
+
+async function saveSkill() {
+  const name = els.skillName.value.trim();
+  const description = els.skillDescription.value.trim();
+  const steps = els.skillSteps.value.trim();
+  if (!name || !description || !steps) {
+    renderStatus(els.skillStatus, false, "Fill in all three boxes first.");
+    return;
+  }
+  const slug = state.currentSkill || slugifySkill(name);
+  if (!slug) {
+    renderStatus(els.skillStatus, false, "Give the task a name using letters or numbers.");
+    return;
+  }
+  const res = await apiFetch(`/api/builder/skills/${encodeURIComponent(state.currentId)}`, {
+    method: "POST",
+    body: { slug, name, description, steps },
+  });
+  if (res.status !== 200) {
+    renderStatus(els.skillStatus, false, extractDetail(res.data) || `Save failed (${res.status}).`);
+    return;
+  }
+  state.currentSkill = slug;
+  renderStatus(els.skillStatus, true, "Saved — try it in the chat on the right!");
+  refreshSkills();
+}
+
+async function deleteSkill() {
+  if (!state.currentSkill) return;
+  const res = await apiFetch(
+    `/api/builder/skills/${encodeURIComponent(state.currentId)}/delete`,
+    { method: "POST", body: { slug: state.currentSkill } }
+  );
+  if (res.status !== 200) {
+    renderStatus(els.skillStatus, false, extractDetail(res.data) || `Delete failed (${res.status}).`);
+    return;
+  }
+  state.currentSkill = null;
+  showSkillEditor(false);
+  refreshSkills();
 }
 
 // ---------- Try-it chat pane ----------
@@ -648,6 +789,10 @@ els.saveBtn.addEventListener("click", handleSave);
 
 els.tabSetupBtn.addEventListener("click", () => switchTab("setup"));
 els.tabKbBtn.addEventListener("click", () => switchTab("kb"));
+els.tabSkillsBtn.addEventListener("click", () => switchTab("skills"));
+els.newSkillBtn.addEventListener("click", newSkill);
+els.saveSkillBtn.addEventListener("click", saveSkill);
+els.deleteSkillBtn.addEventListener("click", deleteSkill);
 
 els.newNoteBtn.addEventListener("click", handleNewNote);
 els.saveNoteBtn.addEventListener("click", handleSaveNote);

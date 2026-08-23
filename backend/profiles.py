@@ -18,6 +18,7 @@ from typing import Any, cast
 
 from backend.config import DEFAULT_PROFILE, KB_ROOT, PROFILE_ROOT
 from backend.kb_loader import iter_kb_files
+from backend.skills import build_skill_catalog, discover_skills
 from backend.types import BrandMetadata
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -142,6 +143,7 @@ class AgentProfile:
     brand: BrandMetadata = field(default_factory=dict)
     data_root: Path | None = None
     mcp_servers: tuple[dict, ...] = ()
+    skills_root: Path | None = None
     project_aliases: dict[str, str] = field(default_factory=dict)
     source_labels: dict[str, str] = field(default_factory=dict)
     # Ordered (match, label) pairs mapping KB paths to public source labels.
@@ -209,6 +211,17 @@ def load_profile(
         manifest = build_kb_manifest(kb_root)
         if manifest:
             system_prompt = manifest + "\n\n" + system_prompt
+
+    # Tier-1 skill discovery: one line per skill, prepended to the system prompt.
+    # Deliberately NOT memoized the way build_kb_manifest is — a visitor who just
+    # wrote a skill in the builder must see it on the next turn, not after a
+    # process restart. Discovery is a shallow directory scan, so re-running it per
+    # profile load is cheap; the output is byte-stable, which is what the prompt
+    # cache actually needs.
+    skills_root = profile_dir / "skills"
+    catalog = build_skill_catalog(discover_skills(skills_root))
+    if catalog:
+        system_prompt = catalog + "\n\n" + system_prompt
     data_root = (
         _project_path(cfg.get("data_root"), profile_dir / "data")
         if cfg.get("data_root")
@@ -231,6 +244,7 @@ def load_profile(
         brand=_brand_metadata(cfg.get("brand", {})),
         data_root=data_root,
         mcp_servers=tuple(cfg.get("mcp_servers", ())),
+        skills_root=skills_root,
         project_aliases={
             str(k).lower(): str(v)
             for k, v in dict(cfg.get("project_aliases", {})).items()

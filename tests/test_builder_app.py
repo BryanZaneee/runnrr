@@ -549,3 +549,174 @@ class TestBuilderProfilesUnlisted:
         r = c.get("/api/profile", params={"profile_id": "hidden-agent"})
         assert r.status_code == 200
         assert r.json()["label"] == "Coffee Helper"
+
+
+# --------------------------------------------------------------------------- #
+# Skills — the plain-English tool-authoring path
+# --------------------------------------------------------------------------- #
+
+
+def _skill_body(**overrides) -> dict:
+    body = {
+        "slug": "refund-request",
+        "name": "Refund request",
+        "description": "When a customer asks for a refund.",
+        "steps": "1. Ask for the order number.\n2. Check it is within 30 days.",
+    }
+    body.update(overrides)
+    return body
+
+
+class TestBuilderSkills:
+    def test_write_then_list(self, builder_client):
+        c, _, profiles_root = builder_client
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+        r = c.post("/api/builder/skills/shop", json=_skill_body(), headers=OWNER)
+        assert r.status_code == 200
+
+        listed = c.get("/api/builder/skills/shop", headers=OWNER).json()["skills"]
+        assert [s["slug"] for s in listed] == ["refund-request"]
+        assert listed[0]["description"] == "When a customer asks for a refund."
+
+    def test_written_file_is_a_portable_skill_md(self, builder_client):
+        """The user supplies three plain fields; we write the SKILL.md format.
+
+        They never see frontmatter, and the artifact is still a standard skill
+        folder that other agent tooling can read.
+        """
+        c, _, profiles_root = builder_client
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+        c.post("/api/builder/skills/shop", json=_skill_body(), headers=OWNER)
+
+        path = profiles_root / "shop" / "skills" / "refund-request" / "SKILL.md"
+        text = path.read_text(encoding="utf-8")
+        assert text.startswith("---\n")
+        assert "name: Refund request" in text
+        assert "description: When a customer asks for a refund." in text
+        assert "1. Ask for the order number." in text
+
+    def test_skill_reaches_the_agent_system_prompt(self, builder_client):
+        from backend.profiles import load_profile
+
+        c, _, profiles_root = builder_client
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+        c.post("/api/builder/skills/shop", json=_skill_body(), headers=OWNER)
+
+        # No restart: the catalog is discovered at profile load, deliberately not
+        # memoized the way the KB manifest is.
+        prompt = load_profile("shop").system_prompt
+        assert "<skills>" in prompt
+        assert "refund-request" in prompt
+
+    def test_round_trip_read(self, builder_client):
+        c, _, profiles_root = builder_client
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+        c.post("/api/builder/skills/shop", json=_skill_body(), headers=OWNER)
+
+        got = c.get(
+            "/api/builder/skills/shop/one", params={"slug": "refund-request"}, headers=OWNER
+        ).json()
+        assert got["name"] == "Refund request"
+        assert got["steps"].startswith("1. Ask for the order number.")
+
+    def test_delete(self, builder_client):
+        c, _, profiles_root = builder_client
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+        c.post("/api/builder/skills/shop", json=_skill_body(), headers=OWNER)
+        r = c.post(
+            "/api/builder/skills/shop/delete", json={"slug": "refund-request"}, headers=OWNER
+        )
+        assert r.status_code == 200
+        assert c.get("/api/builder/skills/shop", headers=OWNER).json()["skills"] == []
+
+    def test_another_owner_cannot_write(self, builder_client):
+        c, _, profiles_root = builder_client
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+        r = c.post("/api/builder/skills/shop", json=_skill_body(), headers=OTHER_OWNER)
+        assert r.status_code == 403
+
+    @pytest.mark.parametrize("slug", ["../escape", "a/b", "UPPER", "has space", ""])
+    def test_bad_slug_rejected(self, builder_client, slug):
+        c, _, profiles_root = builder_client
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+        r = c.post("/api/builder/skills/shop", json=_skill_body(slug=slug), headers=OWNER)
+        assert r.status_code in (400, 422)
+
+    def test_bundled_profile_rejected(self, builder_client):
+        c, _, profiles_root = builder_client
+        bundled = profiles_root / "bundled"
+        bundled.mkdir(parents=True)
+        (bundled / "profile.json").write_text(json.dumps({"id": "bundled", "label": "B"}))
+        (bundled / "system.md").write_text("x")
+        r = c.post("/api/builder/skills/bundled", json=_skill_body(), headers=OWNER)
+        assert r.status_code == 409
+
+    def test_read_skill_is_allowlisted(self):
+        from backend.builder import BUILDER_ALLOWED_TOOLS
+
+        assert "read_skill" in BUILDER_ALLOWED_TOOLS
+
+    def test_skill_cap_enforced(self, builder_client, monkeypatch):
+        from backend import config
+
+        monkeypatch.setattr(config, "MAX_SKILLS_PER_PROFILE", 2)
+        c, _, profiles_root = builder_client
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+        for i in range(2):
+            assert (
+                c.post(
+                    "/api/builder/skills/shop", json=_skill_body(slug=f"s{i}"), headers=OWNER
+                ).status_code
+                == 200
+            )
+        r = c.post("/api/builder/skills/shop", json=_skill_body(slug="s2"), headers=OWNER)
+        assert r.status_code == 400
+
+
+class TestOwnerScopedListing:
+    def test_saved_agent_is_listed_for_its_owner(self, builder_client):
+        """The bug this fixes: a saved agent vanished from the builder's picker.
+
+        GET /api/profiles deliberately omits builder profiles so they stay
+        unlisted publicly — but the picker read that endpoint, so a new agent
+        disappeared within the same click that created it, with no way back.
+        """
+        c, _, profiles_root = builder_client
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+
+        public = c.get("/api/profiles").json()["profiles"]
+        assert "shop" not in [p["id"] for p in public], "must stay unlisted publicly"
+
+        mine = c.get("/api/builder/profiles", headers=OWNER).json()["profiles"]
+        assert [p["id"] for p in mine] == ["shop"]
+
+    def test_other_owners_do_not_see_it(self, builder_client):
+        c, _, profiles_root = builder_client
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+        mine = c.get("/api/builder/profiles", headers=OTHER_OWNER).json()["profiles"]
+        assert mine == []
+
+    def test_no_token_lists_nothing(self, builder_client):
+        c, _, profiles_root = builder_client
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+        assert c.get("/api/builder/profiles").json()["profiles"] == []
+
+    def test_bundled_profiles_report_readonly(self, builder_client):
+        """The frontend keys `editable` off this flag.
+
+        It used to key off `probe.status === 200`, but read_profile returns 200
+        for bundled profiles on purpose so they are readable as examples — so
+        every bundled profile looked editable and the first save 409'd.
+        """
+        c, _, profiles_root = builder_client
+        bundled = profiles_root / "bundled"
+        bundled.mkdir(parents=True)
+        (bundled / "profile.json").write_text(json.dumps({"id": "bundled", "label": "B"}))
+        (bundled / "system.md").write_text("x")
+
+        r = c.get("/api/builder/profile/bundled", headers=OWNER)
+        assert r.status_code == 200
+        assert r.json()["readonly"] is True
+
+        c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
+        assert c.get("/api/builder/profile/shop", headers=OWNER).json()["readonly"] is False

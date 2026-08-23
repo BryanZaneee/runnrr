@@ -393,10 +393,19 @@ class TestDeepSeekModelSurface:
 # --------------------------------------------------------------------------- #
 
 
-def _gemini_chunk(*, text=None, parts=None, usage=None):
+def _gemini_chunk(*, text=None, parts=None, usage=None, finish_reason=None):
     candidates = []
-    if parts is not None:
-        candidates = [SimpleNamespace(content=SimpleNamespace(parts=parts))]
+    if parts is not None or finish_reason is not None:
+        candidates = [
+            SimpleNamespace(
+                content=SimpleNamespace(parts=parts or []),
+                # Real Gemini responses always carry a finish_reason; the provider
+                # reads it rather than inferring stop_reason from content.
+                finish_reason=(
+                    SimpleNamespace(name=finish_reason) if finish_reason else None
+                ),
+            )
+        ]
     return SimpleNamespace(text=text, candidates=candidates, usage_metadata=usage)
 
 
@@ -502,7 +511,7 @@ class TestGeminiStreaming:
         assert events[-1] == {"type": "message_done", "stop_reason": "tool_use"}
 
     @pytest.mark.asyncio
-    async def test_tool_use_start_deduped_per_name(self):
+    async def test_tool_use_start_emitted_per_call(self):
         from backend.providers.gemini_provider import GeminiProvider
 
         client = FakeGeminiClient([
@@ -515,8 +524,11 @@ class TestGeminiStreaming:
 
         events = await _drain_gemini(provider, [])
 
+        # One event per CALL, matching Anthropic. Deduping by name meant a hop
+        # calling the same tool twice announced once, so identical work looked
+        # different depending on which provider ran it.
         starts = [e for e in events if e["type"] == "tool_use_start"]
-        assert len(starts) == 1
+        assert len(starts) == 2
         completes = [e for e in events if e["type"] == "tool_use_complete"]
         assert [c["tool_use_id"] for c in completes] == ["fc_1", "fc_2"]
 
@@ -540,7 +552,10 @@ class TestGeminiStreaming:
         fr = messages[0].parts[0].function_response
         assert fr.id == "fc_1"
         assert fr.name == "search_kb"
-        assert fr.response == {"hits": []}
+        # Raw string passthrough, matching what Anthropic and OpenAI show the
+        # model. Parsing and re-wrapping meant the model saw a different shape
+        # per provider for the same tool.
+        assert fr.response == {"content": '{"hits": []}'}
 
     @pytest.mark.asyncio
     async def test_usage_maps_thinking_and_cache_fields(self):

@@ -26,6 +26,7 @@ async def run_conversation_stream(
     model: str,
     profile: AgentProfile | None = None,
     turn_id: str = "",
+    max_tokens: int | None = None,
 ) -> AsyncIterator[dict]:
     """Run one user turn through the agent. Yields SSE-shaped event dicts.
 
@@ -63,7 +64,7 @@ async def run_conversation_stream(
                 messages=session["messages"],
                 system=system_block,
                 tools=tool_schemas,
-                max_tokens=MAX_TOKENS,
+                max_tokens=max_tokens or MAX_TOKENS,
             ):
                 t = ev.get("type")
                 if t == "text_delta":

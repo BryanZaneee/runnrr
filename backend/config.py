@@ -18,6 +18,8 @@ PROFILE_ROOT: Path = Path(os.environ.get("EASYAGENT_PROFILE_ROOT", "./profiles")
 
 DEFAULT_PROFILE: str = os.environ.get("DEFAULT_PROFILE", "personal-agent")
 DEFAULT_MODEL: str = os.environ.get("DEFAULT_MODEL", "claude-sonnet-4-5")
+# Global ceiling. Per-model limits come from MODEL_REGISTRY; this caps them all,
+# so raising a model's max_output_tokens alone will not blow up spend.
 MAX_TOKENS: int = int(os.environ.get("MAX_TOKENS", "4096"))
 MAX_TOOL_HOPS: int = int(os.environ.get("MAX_TOOL_HOPS", "8"))
 # Tools in one hop run concurrently on worker threads. Bounded because the
@@ -80,7 +82,14 @@ ALLOWED_ORIGINS: list[str] = [
     o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()
 ]
 
-# model_id -> {provider, model, label, [base_url], [api_key_env]}
+# model_id -> ModelConfig. This dict IS the model-capability lookup: widen it
+# rather than wrapping it in a resolver layer. Every entry must declare the six
+# capability flags and a max_output_tokens -- test_every_registry_entry_declares
+# _capabilities enforces that, so the registry cannot rot when a model is added.
+#
+# Capabilities are read at request-construction time and a missing or
+# unhonorable one RAISES. Prices deliberately live in backend/pricing.py, where
+# a missing entry logs null instead.
 # `model_id` is the public identifier sent by the frontend; `model` is what each provider's API expects.
 MODEL_REGISTRY: dict[str, ModelConfig] = {
     "claude-opus-4-7": {
@@ -89,6 +98,12 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         "label": "Claude Opus 4.7",
         "vendor": "Anthropic",
         "thinking_budget": 2048,
+        "context_window": 1000000,
+        "max_output_tokens": 128000,
+        "supports_tools": True,
+        "supports_thinking": True,
+        "supports_caching": True,
+        "supports_vision": True,
     },
     "claude-sonnet-4-6": {
         "provider": "anthropic",
@@ -96,6 +111,12 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         "label": "Claude Sonnet 4.6",
         "vendor": "Anthropic",
         "thinking_budget": 1500,
+        "context_window": 1000000,
+        "max_output_tokens": 128000,
+        "supports_tools": True,
+        "supports_thinking": True,
+        "supports_caching": True,
+        "supports_vision": True,
     },
     "claude-sonnet-4-5": {
         "provider": "anthropic",
@@ -103,6 +124,12 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         "label": "Claude Sonnet 4.5",
         "vendor": "Anthropic",
         "thinking_budget": 1500,
+        "context_window": 200000,
+        "max_output_tokens": 64000,
+        "supports_tools": True,
+        "supports_thinking": True,
+        "supports_caching": True,
+        "supports_vision": True,
     },
     "claude-opus-4-5": {
         "provider": "anthropic",
@@ -110,32 +137,58 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         "label": "Claude Opus 4.5",
         "vendor": "Anthropic",
         "thinking_budget": 2048,
+        "context_window": 200000,
+        "max_output_tokens": 64000,
+        "supports_tools": True,
+        "supports_thinking": True,
+        "supports_caching": True,
+        "supports_vision": True,
     },
     "claude-haiku-4-5": {
         "provider": "anthropic",
         "model": "claude-haiku-4-5",
         "label": "Claude Haiku 4.5",
         "vendor": "Anthropic",
+        "context_window": 200000,
+        "max_output_tokens": 64000,
+        "supports_tools": True,
+        "supports_thinking": True,
+        "supports_caching": True,
+        "supports_vision": True,
     },
     "kimi-k2.6": {
         "provider": "openai_compat",
         "model": "kimi-k2.6",
         "base_url": "https://api.moonshot.ai/v1",
+        "include_tool_result_name": True,
         "api_key_env": "MOONSHOT_API_KEY",
         "token_param": "max_tokens",
         "stream_options": True,
         "label": "Kimi K2.6",
         "vendor": "Moonshot",
+        "context_window": 256000,
+        "max_output_tokens": 16384,
+        "supports_tools": True,
+        "supports_thinking": False,
+        "supports_caching": False,
+        "supports_vision": False,
     },
     "kimi-k2.6-thinking": {
         "provider": "openai_compat",
         "model": "kimi-k2.6-thinking",
         "base_url": "https://api.moonshot.ai/v1",
+        "include_tool_result_name": True,
         "api_key_env": "MOONSHOT_API_KEY",
         "token_param": "max_tokens",
         "stream_options": True,
         "label": "Kimi K2.6 Thinking",
         "vendor": "Moonshot",
+        "context_window": 256000,
+        "max_output_tokens": 16384,
+        "supports_tools": True,
+        "supports_thinking": True,
+        "supports_caching": False,
+        "supports_vision": False,
     },
     "gpt-5": {
         "provider": "openai_compat",
@@ -146,6 +199,12 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         "stream_options": True,
         "label": "GPT-5",
         "vendor": "OpenAI",
+        "context_window": 400000,
+        "max_output_tokens": 128000,
+        "supports_tools": True,
+        "supports_thinking": True,
+        "supports_caching": False,
+        "supports_vision": True,
     },
     "gpt-5-mini": {
         "provider": "openai_compat",
@@ -156,6 +215,12 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         "stream_options": True,
         "label": "GPT-5 Mini",
         "vendor": "OpenAI",
+        "context_window": 400000,
+        "max_output_tokens": 128000,
+        "supports_tools": True,
+        "supports_thinking": True,
+        "supports_caching": False,
+        "supports_vision": True,
     },
     "gpt-4.1": {
         "provider": "openai_compat",
@@ -166,6 +231,12 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         "stream_options": True,
         "label": "GPT-4.1",
         "vendor": "OpenAI",
+        "context_window": 1047576,
+        "max_output_tokens": 32768,
+        "supports_tools": True,
+        "supports_thinking": False,
+        "supports_caching": False,
+        "supports_vision": True,
     },
     "gemini-2.5-pro": {
         "provider": "gemini",
@@ -173,6 +244,12 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         "api_key_env": "GEMINI_API_KEY",
         "label": "Gemini 2.5 Pro",
         "vendor": "Google",
+        "context_window": 1048576,
+        "max_output_tokens": 65536,
+        "supports_tools": True,
+        "supports_thinking": False,
+        "supports_caching": False,
+        "supports_vision": True,
     },
     "gemini-2.5-flash": {
         "provider": "gemini",
@@ -180,6 +257,12 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         "api_key_env": "GEMINI_API_KEY",
         "label": "Gemini 2.5 Flash",
         "vendor": "Google",
+        "context_window": 1048576,
+        "max_output_tokens": 65536,
+        "supports_tools": True,
+        "supports_thinking": False,
+        "supports_caching": False,
+        "supports_vision": True,
     },
     "deepseek-v4-flash": {
         "provider": "openai_compat",
@@ -193,8 +276,26 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         "preserve_reasoning_content": True,
         "label": "DeepSeek V4 Flash",
         "vendor": "DeepSeek",
+        "context_window": 128000,
+        "max_output_tokens": 8192,
+        "supports_tools": True,
+        "supports_thinking": True,
+        "supports_caching": False,
+        "supports_vision": False,
     },
 }
+
+
+def max_tokens_for(model_id: str) -> int:
+    """Effective output cap for one model.
+
+    A single global MAX_TOKENS was applied to every model regardless of what it
+    supports, which is why the Anthropic path had to hand-patch it upward for
+    extended thinking. min() keeps the global as a spend ceiling.
+    """
+    cfg = MODEL_REGISTRY.get(model_id)
+    per_model = (cfg or {}).get("max_output_tokens")
+    return min(MAX_TOKENS, per_model) if per_model else MAX_TOKENS
 
 
 def available_models() -> list[AvailableModel]:

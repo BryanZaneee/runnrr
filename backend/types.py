@@ -65,6 +65,17 @@ class ModelConfig(TypedDict):
     reasoning_effort: NotRequired[str]
     extra_body: NotRequired[dict[str, Any]]
     preserve_reasoning_content: NotRequired[bool]
+    include_tool_result_name: NotRequired[bool]
+    usage_unsupported: NotRequired[bool]
+    # Capability metadata. Read when a request is constructed, so a capability we
+    # cannot honor must RAISE rather than be silently dropped. Prices live in
+    # backend/pricing.py instead, because a missing price must log null.
+    context_window: NotRequired[int]
+    max_output_tokens: NotRequired[int]
+    supports_tools: NotRequired[bool]
+    supports_thinking: NotRequired[bool]
+    supports_caching: NotRequired[bool]
+    supports_vision: NotRequired[bool]
 
 
 class AvailableModel(TypedDict):

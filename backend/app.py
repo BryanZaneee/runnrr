@@ -37,6 +37,7 @@ from backend.config import (
     LOG_LEVEL,
     MAX_ACTIVE_SESSIONS,
     MAX_TOKENS,
+    max_tokens_for,
     MAX_TURNS_PER_SESSION,
     MODEL_REGISTRY,
     PROFILE_ROOT,
@@ -339,7 +340,15 @@ async def chat(request: Request, req: ChatRequest) -> StreamingResponse:
 
     ip = request.client.host if request.client else "unknown"
     instrumented = _instrument(
-        run_conversation_stream(req.message, session, provider, cfg["model"], profile),
+        run_conversation_stream(
+            req.message,
+            session,
+            provider,
+            cfg["model"],
+            profile,
+            turn_id=turn_id,
+            max_tokens=max_tokens_for(req.model),
+        ),
         ip=ip,
         session_id=req.session_id,
         model_id=req.model,

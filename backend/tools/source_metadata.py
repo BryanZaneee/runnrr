@@ -79,15 +79,6 @@ def label_from_kb_path(
     labels: Mapping[str, str] | None = None,
     path_labels: Sequence[tuple[str, str]] | None = None,
 ) -> str:
-    """Public wrapper around the KB-path → display-label mapper."""
-    return _label_from_kb_path(path, labels, path_labels)
-
-
-def _label_from_kb_path(
-    path: str,
-    labels: Mapping[str, str] | None = None,
-    path_labels: Sequence[tuple[str, str]] | None = None,
-) -> str:
     """Map an internal KB path to a sanitized public category label.
 
     Profile-supplied `source_path_labels` win first, so business taxonomies stay
@@ -136,7 +127,7 @@ def _kb_search_metadata(
 ) -> dict[str, Any]:
     matches = matches if isinstance(matches, list) else []
     items = _unique_items([
-        _source_item(_label_from_kb_path(str(item.get("path", "")), labels, path_labels), kind)
+        _source_item(label_from_kb_path(str(item.get("path", "")), labels, path_labels), kind)
         for item in matches
         if isinstance(item, dict)
     ])
@@ -182,7 +173,7 @@ def read_file_metadata(
     context: ToolContext | None = None,
 ) -> dict[str, Any]:
     labels, path_labels = _profile_labels(context)
-    label = _label_from_kb_path(str((out or {}).get("path", "")), labels, path_labels)
+    label = label_from_kb_path(str((out or {}).get("path", "")), labels, path_labels)
     return static_source_metadata(f"read {label}", label=label, kind="kb_read")
 
 
@@ -217,7 +208,7 @@ def semantic_search_metadata(
         entries = [
             {
                 "label": _clean_label(
-                    _label_from_kb_path(r.chunk.path, labels, path_labels)
+                    label_from_kb_path(r.chunk.path, labels, path_labels)
                 ),
                 "score": round(r.score, 4),
                 "bm25_score": round(r.bm25_score, 3)

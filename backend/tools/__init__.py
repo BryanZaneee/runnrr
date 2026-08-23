@@ -1,46 +1,19 @@
-"""Tool schemas, results, and dispatch for EasyAgent native tools."""
+"""Tool schemas, results, and dispatch for EasyAgent native tools.
+
+Deliberately narrow: only the names other packages import from
+``backend.tools`` itself. Everything else -- tool definitions, handlers,
+the registry, source-metadata builders -- is imported from its owning
+submodule (``backend.tools.registry``, ``backend.tools.sales``, ...).
+"""
 from __future__ import annotations
 
-from backend.tool_errors import ToolExecutionError
-from backend.tools.calculator import calculator
-from backend.tools.definitions import ToolContext, ToolDef, ToolHandler
-from backend.tools.dispatch import (
-    run_tool,
-)
-from backend.tools.registry import TOOL_DEFS, TOOL_DEFS_BY_NAME, TOOL_HANDLERS
+from backend.tools.dispatch import run_tool
 from backend.tools.results import ToolResult
-from backend.tools.sales import (
-    catalog_lookup,
-    checkout_link_preview,
-    lead_capture_preview,
-    qualify_lead,
-)
-from backend.tools.schemas import (
-    DEFAULT_TOOL_NAMES,
-    SCHEMAS,
-    SCHEMAS_BY_NAME,
-    schemas_for_tools,
-)
-from backend.tools.web_fetch import fetch_url_text
+from backend.tools.schemas import SCHEMAS, schemas_for_tools
 
 __all__ = [
-    "DEFAULT_TOOL_NAMES",
     "SCHEMAS",
-    "SCHEMAS_BY_NAME",
-    "TOOL_DEFS",
-    "TOOL_DEFS_BY_NAME",
-    "TOOL_HANDLERS",
-    "ToolContext",
-    "ToolDef",
-    "ToolExecutionError",
-    "ToolHandler",
     "ToolResult",
-    "calculator",
-    "catalog_lookup",
-    "checkout_link_preview",
-    "fetch_url_text",
-    "lead_capture_preview",
-    "qualify_lead",
     "run_tool",
     "schemas_for_tools",
 ]

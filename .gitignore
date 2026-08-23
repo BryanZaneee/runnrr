@@ -23,3 +23,7 @@ kb/*
 profiles/*/.index/
 profiles/*/evals/runs/
 .playwright-mcp/
+
+# Generated/one-off artifacts that land at the repo root.
+repomix-output.xml
+easyagent-walkthrough.html

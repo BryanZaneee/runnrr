@@ -1,1 +1,1 @@
-"""RAG evaluation datasets, graders, and harness (runner/baseline deferred)."""
+"""RAG evaluation datasets, graders, and harness."""

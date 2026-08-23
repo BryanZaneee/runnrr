@@ -18,7 +18,6 @@ from backend.rag.vector_index import VectorIndex
 BM25_FILENAME = "bm25.pkl"
 MANIFEST_FILENAME = "manifest.json"
 VECTOR_FILENAME = "index.sqlite"
-DEFAULT_EMBED_BATCH_SIZE = 96
 
 
 @dataclass(frozen=True)

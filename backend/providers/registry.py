@@ -11,8 +11,35 @@ class ProviderSetupError(RuntimeError):
     """Raised when a provider cannot be constructed from env + registry config."""
 
 
+# Providers are stateless apart from their SDK client, so one instance per model
+# is reusable. Before this, every chat turn built a fresh AsyncAnthropic /
+# AsyncOpenAI / genai.Client with its own httpx pool -- a full TCP+TLS handshake
+# per turn, and the pool was dropped to the GC rather than closed.
+#
+# Keyed by model_id only, because cfg is fully determined by it. Tests must call
+# clear_provider_cache() between cases: the async SDK clients bind their
+# transport to the event loop they are first used on, and FastAPI's TestClient
+# runs each request through a fresh loop.
+_PROVIDER_CACHE: dict[str, LLMProvider] = {}
+
+
+def clear_provider_cache() -> None:
+    """Drop cached providers. Called by an autouse test fixture."""
+    _PROVIDER_CACHE.clear()
+
+
 def build_provider(model_id: str, cfg: ModelConfig) -> LLMProvider:
-    """Construct a provider for one MODEL_REGISTRY entry."""
+    """Return a provider for one MODEL_REGISTRY entry, reusing its SDK client."""
+    cached = _PROVIDER_CACHE.get(model_id)
+    if cached is not None:
+        return cached
+    provider = _construct_provider(cfg)
+    _PROVIDER_CACHE[model_id] = provider
+    return provider
+
+
+def _construct_provider(cfg: ModelConfig) -> LLMProvider:
+    """Build a fresh provider. Kept pure so construction stays directly testable."""
     provider = cfg["provider"]
     if provider == "anthropic":
         if not os.environ.get("ANTHROPIC_API_KEY"):

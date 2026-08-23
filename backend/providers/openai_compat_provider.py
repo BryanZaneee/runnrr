@@ -12,7 +12,7 @@ from typing import Any, AsyncIterator
 
 from openai import AsyncOpenAI
 
-from backend.config import PROVIDER_TIMEOUT_SECONDS
+from backend.config import PROVIDER_MAX_RETRIES, PROVIDER_TIMEOUT_SECONDS
 from backend.profiles import AgentProfile
 from backend.providers.base import Event
 from backend.tools import ToolResult, schemas_for_tools
@@ -45,6 +45,7 @@ class OpenAICompatProvider:
             api_key=os.environ[api_key_env],
             base_url=base_url,
             timeout=PROVIDER_TIMEOUT_SECONDS,
+            max_retries=PROVIDER_MAX_RETRIES,
         )
 
     def format_user(self, text: str) -> ProviderMessage:
@@ -132,7 +133,10 @@ class OpenAICompatProvider:
                 if reasoning:
                     reasoning_parts.append(reasoning)
                     yield {"type": "thinking_delta", "text": reasoning}
-                    continue
+                    # No `continue` here. It used to skip the rest of THIS delta,
+                    # so any provider that interleaves reasoning with content or
+                    # tool_calls in one chunk silently lost those fragments -- a
+                    # dropped tool call with no error anywhere.
 
                 text = getattr(delta, "content", None)
                 if text:

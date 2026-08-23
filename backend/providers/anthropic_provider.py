@@ -7,11 +7,19 @@ from typing import Any, AsyncIterator
 
 from anthropic import AsyncAnthropic
 
-from backend.config import PROVIDER_TIMEOUT_SECONDS
+from backend.config import PROVIDER_MAX_RETRIES, PROVIDER_TIMEOUT_SECONDS
 from backend.profiles import AgentProfile
 from backend.providers.base import Event
 from backend.tools import ToolResult, schemas_for_tools
 from backend.types import ProviderMessage, UsagePayload
+
+
+# Anthropic is the only provider with a request-side cache control; OpenAI,
+# DeepSeek, Kimi, and Gemini all cache implicitly with nothing to send. That
+# asymmetry is why the provider itself is the gate here rather than a registry
+# flag -- and it is the strongest argument against ever collapsing these three
+# behind a single generic client, which would erase the lever entirely.
+_EPHEMERAL = {"type": "ephemeral"}
 
 
 class AnthropicProvider:
@@ -19,6 +27,10 @@ class AnthropicProvider:
         self.client = AsyncAnthropic(
             api_key=os.environ["ANTHROPIC_API_KEY"],
             timeout=PROVIDER_TIMEOUT_SECONDS,
+            # The SDK honours Retry-After on 429/5xx. There was no retry at any
+            # level before, so a single rate-limit blip surfaced to the user as a
+            # generic "model provider error".
+            max_retries=PROVIDER_MAX_RETRIES,
         )
         # When set, enable extended thinking with this budget. The API requires
         # max_tokens > thinking.budget_tokens, so the stream call also bumps
@@ -47,13 +59,40 @@ class AnthropicProvider:
         )
 
     def tools_for_provider(self, profile: AgentProfile) -> list[dict]:
-        return schemas_for_tools(
+        """Tool schemas with a cache breakpoint on the last one.
+
+        Anthropic caches by PREFIX, and the render order is tools -> system ->
+        messages. A breakpoint on the final tool therefore caches the whole tool
+        block. The block is deterministic per profile -- SCHEMAS is built once at
+        import and schemas_for_tools preserves profile.tools order -- which is the
+        property that makes this a cache READ on hop 2 rather than another write.
+        Pinned by test_prefix_is_byte_stable.
+        """
+        schemas = schemas_for_tools(
             profile.tools,
             description_overrides=profile.tool_descriptions,
         )
+        if schemas:
+            schemas = [*schemas[:-1], {**schemas[-1], "cache_control": _EPHEMERAL}]
+        return schemas
 
     def system_for_provider(self, profile: AgentProfile) -> Any:
-        return [{"type": "text", "text": profile.system_prompt}]
+        """System prompt as one cached block.
+
+        Only two breakpoints are used (last tool, system) and deliberately none on
+        messages. Messages are where instability creeps in -- switching profile or
+        model resets session["messages"] entirely, and hop boundaries move -- and a
+        breakpoint on an unstable prefix is worse than none: every turn becomes a
+        cache WRITE instead of a read. Decide on a message breakpoint from the
+        cache_creation vs cache_read numbers this PR makes trustworthy, not upfront.
+        """
+        return [
+            {
+                "type": "text",
+                "text": profile.system_prompt,
+                "cache_control": _EPHEMERAL,
+            }
+        ]
 
     async def stream(
         self,

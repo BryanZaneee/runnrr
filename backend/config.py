@@ -20,11 +20,18 @@ DEFAULT_PROFILE: str = os.environ.get("DEFAULT_PROFILE", "personal-agent")
 DEFAULT_MODEL: str = os.environ.get("DEFAULT_MODEL", "claude-sonnet-4-5")
 MAX_TOKENS: int = int(os.environ.get("MAX_TOKENS", "4096"))
 MAX_TOOL_HOPS: int = int(os.environ.get("MAX_TOOL_HOPS", "8"))
+# Tools in one hop run concurrently on worker threads. Bounded because the
+# default thread pool is process-wide -- an unbounded max-width hop would starve
+# unrelated requests on the single uvicorn worker.
+MAX_PARALLEL_TOOLS: int = int(os.environ.get("MAX_PARALLEL_TOOLS", "4"))
 
 # Per-read inactivity timeout for provider SDK clients (httpx read phase): a
 # stream that goes silent for this long raises instead of hanging the request.
 # Long-but-active thinking streams are unaffected.
 PROVIDER_TIMEOUT_SECONDS: float = float(os.environ.get("PROVIDER_TIMEOUT_SECONDS", "120"))
+# Passed to each SDK client. The SDKs retry 408/409/429/5xx with backoff and
+# honour Retry-After; hand-rolling a retry loop on top would double-count.
+PROVIDER_MAX_RETRIES: int = int(os.environ.get("PROVIDER_MAX_RETRIES", "2"))
 
 SESSION_TTL: int = int(os.environ.get("SESSION_TTL_SECONDS", "1800"))
 MAX_TURNS_PER_SESSION: int = int(os.environ.get("MAX_TURNS_PER_SESSION", "40"))

@@ -2,6 +2,8 @@
 
 EasyAgent is a portable framework for building reusable agentic AI apps across different model providers. Define an agent profile, give it a focused local knowledge base and toolset, then run it through Claude, OpenAI, Gemini, Kimi, or DeepSeek without rewriting the workflow each time.
 
+**Product: Runnrr.** EasyAgent is the internal engine name; [Runnrr](#runnrr-engine-map) is the BZS Software product that runs on it — AI integration for small and mid-size businesses (inbox, support, invoices, 24/7 inbound calls/SMS). Buyers see Runnrr; this repo and its Python package stay `easyagent`.
+
 The engine is provider-agnostic and business-agnostic: profiles, knowledge bases, providers, and tools are separated so the same loop can power a personal-site agent, a customer-support bot, a sales assistant, or an internal-ops agent. Keys stay server-side; browsers talk to the FastAPI backend over SSE and never see provider credentials.
 
 ## Bundled profiles
@@ -13,7 +15,96 @@ The engine is provider-agnostic and business-agnostic: profiles, knowledge bases
 - [`profiles/bzs-concierge/`](./profiles/bzs-concierge/) — public concierge demo for bzssoftware.com: catalog-backed discovery, lead qualification, and preview-only lead capture (no checkout tool).
 - [`profiles/frampton/`](./profiles/frampton/) — Dark Souls 1 guide grounded in a public Fextralife scrape committed at `kb/frampton/`.
 
-Tier-2 multi-channel/multi-tenant agents (WhatsApp, Instagram, Gmail, Google Business) need a different runtime (channel adapters, queues, durable state) and will live in their own deployment when built — they are out of scope for this engine.
+Multi-channel/multi-tenant agents (WhatsApp, Instagram, Gmail, Google Business, Twilio SMS/voice) are **out of engine scope today**. When built, channel adapters will sit *outside* the agent loop and call the same `POST /api/chat` — not a second harness. See the [engine map](#runnrr-engine-map) and the prepared `feat/channel-webhooks` / `feat/channel-voice` branches.
+
+## Runnrr engine map
+
+How the product decomposes onto this repo, and the rules that follow from it.
+
+### Architecture one-pager
+
+```
+                 ┌──────────────────────────────────────────┐
+                 │ Control plane (future: tenants, auth,     │
+                 │ usage, dashboard — stacked PRs #1–#3)     │
+                 └───────────────┬──────────────────────────┘
+                                 │ profile_id, tenant_id, budget
+ Channel adapters                ▼
+ (SMS / voice — future) ──▶  POST /api/chat  ──▶  EasyAgent loop  ──▶  providers
+ Twilio webhooks, TwiML          SSE           backend/agent.py       Anthropic / OpenAI /
+ STT ⇄ TTS                                     profiles + tool         Gemini / Kimi / DeepSeek
+                                               allowlists + KB/RAG
+```
+
+- **One agent, one job, one tool pack.** A profile is a scoped persona with a tool allowlist. Voice and SMS profiles get a *tiny* pack (see recipe below), never the kitchen sink.
+- **Channel adapters are not a second harness.** A Twilio SMS webhook maps `From/To/Body` onto `/api/chat` with a durable session key and returns TwiML. Voice is STT → the same endpoint → TTS. Nothing about the loop changes per channel.
+- **Decision (made): no vendored harness for client traffic.** DeepSeek Harness, Hermes, and OpenClaw are not vendored into this repo. We steal the ideas — append-only transcripts so the provider prefix cache hits, one agent / one job / one tool pack — and keep client chat = this engine + a model API. DeepSeek Harness stays optional for internal Runnrr staff later, never on a customer's phone line.
+
+### What Runnrr sells (and doesn't)
+
+Sells: scoped profiles, tool allowlists, RAG over a business's own documents, evals, human-in-the-loop actions ("AI drafts, people send"), enterprise model APIs (not personal ChatGPT accounts), and 24/7 inbound calls/SMS later. Does **not** sell fully autonomous employees, "#1 on Google" SEO, or outbound AI voice (TCPA).
+
+### HAVE / NOT YET
+
+| Capability | Status | Where |
+| --- | --- | --- |
+| Multi-provider loop (Anthropic, OpenAI, Gemini, Kimi, DeepSeek) | HAVE | `backend/agent.py`, `backend/providers/` |
+| Profiles + tool allowlists + `system.md` + KB | HAVE | `profiles/`, `backend/profiles.py`, `backend/tools/` |
+| RAG (hybrid BM25 + dense, optional rerank) + evals | HAVE | `backend/rag/`, `backend/evals/` |
+| Prefix / prompt caching, `cache_control` on Anthropic | HAVE | PR #9 |
+| Honest token, cost, and budget accounting | HAVE | PR #4, `backend/usage.py`, `backend/pricing.py` |
+| Markdown skills (`SKILL.md`, progressive disclosure) | HAVE | PR #6, `backend/skills.py` |
+| Model capability declaration (fail loud) | HAVE | PR #7, `MODEL_REGISTRY` |
+| FastAPI + SSE, server-side keys, rate limits, daily budget | HAVE | `backend/app.py` |
+| Local builder (`ENABLE_PROFILE_EDITOR`) + operator dashboard | HAVE | `backend/builder.py`, `web/` |
+| Sales concierge tools | HAVE (preview only — no real CRM/Stripe) | `backend/tools/sales.py` |
+| Multi-tenant control plane (agents, usage, auth, dashboard) | NOT YET — open stacked PRs #1 → #2 → #3 | see below |
+| Durable sessions (survive restart, keyed by profile/tenant) | NOT YET | `feat/durable-sessions` |
+| Audit log + per-agent kill switch | NOT YET | `feat/audit-log-kill-switch` |
+| HITL actions (`requires_approval` tools, approvals API) | NOT YET | `feat/hitl-actions` |
+| Inbound SMS webhook (Twilio) | NOT YET | `feat/channel-webhooks` |
+| Inbound voice (Twilio Media Streams, STT/TTS) | NOT YET | `feat/channel-voice` |
+| Real calendar + CRM adapters (per-tenant OAuth, HITL on) | NOT YET | `feat/calendar-crm-adapters` |
+| MCP runtime for `mcp_servers` already declared in profiles | NOT YET | `feat/mcp-runtime` |
+| DLP redaction before provider calls; "do not embed" RAG label | NOT YET | `feat/dlp-redact` |
+| Live Stripe | NOT YET — last, optional | `feat/stripe-live` (not started) |
+
+Each NOT YET row has a draft PR whose body is `docs/prs/<branch>.md` — problem, design, API sketch, tests to write, out-of-scope, dependencies — plus skipped contract tests. They are scaffolds, not implementations.
+
+### Stacked SaaS PRs (open — do not merge from here)
+
+The control plane is three open, stacked PRs. They are intentionally left open and must not be merged, rebased, or squashed as part of any docs change:
+
+1. [#1 `refactor/profile-from-config`](https://github.com/BryanZaneee/easyagent/pull/1) — extract `profile_from_config` (base was `refactor/tools-rag-evals-split`).
+2. [#2 `feat/saas-auth-db-endpoints`](https://github.com/BryanZaneee/easyagent/pull/2) — per-tenant agents, usage, optional auth.
+3. [#3 `feat/saas-dashboard-ui`](https://github.com/BryanZaneee/easyagent/pull/3) — authed dashboard.
+
+### Prefix-cache rules for contributors
+
+The prompt prefix is cached per session ([PR #9](https://github.com/BryanZaneee/easyagent/pull/9)). Every provider benefits when the prefix is byte-stable; Anthropic additionally gets explicit `cache_control` breakpoints. To keep hits high:
+
+- **Append-only messages.** Never rewrite, reorder, or drop earlier turns. Compaction, if ever added, is a new prefix — not an in-place edit.
+- **Freeze the system prompt and tool schemas for the session.** Switching profile or model already resets the session; don't mutate either mid-conversation. Skill bodies arrive as tool results, never as a system-prompt rewrite.
+- **Inject volatile data after the cached prefix.** Current time, caller id, channel metadata, and per-turn context go in the user turn (or a trailing block), never in the system prompt.
+- **Don't "clean" history.** A bad tool result stays where it is; append a correction turn instead of editing the transcript.
+
+### Profile recipe: inbound SMS / voice
+
+A future `inbound-sms` or `inbound-voice` profile is deliberately small:
+
+```json
+{
+  "id": "inbound-sms",
+  "label": "Front Desk (SMS)",
+  "kb_root": "kb/<tenant>-faq",
+  "system_prompt_path": "profiles/inbound-sms/system.md",
+  "tools": ["search_kb", "read_file", "book_appointment", "crm_note", "transfer_to_human"]
+}
+```
+
+- Tiny tool pack: FAQ (KB read/search), book, note, transfer-to-human. Anything that sends, exports, or deletes is `requires_approval` (HITL).
+- **No** shell, **no** MCP, **no** browser, **no** `web_search`. These profiles run on a customer's phone number; the blast radius must stay small.
+- Volatile caller data (number, time, channel) is injected per turn, not into `system.md` (see cache rules).
 
 ## Quick start
 
@@ -138,13 +229,9 @@ This public repo does **not** include the personal knowledge base, resume files,
 - [`docs/sales_pitch.md`](docs/sales_pitch.md) — BZS Software pitch, discovery questions, and demo runbooks for business workflow conversations.
 - [`docs/agent_best_practices.md`](docs/agent_best_practices.md) — checklist for API boundaries, model selection, prompts, tools, streaming, retrieval, and evals.
 
-## Forward-looking ideas
+## Roadmap
 
-- MCP runtime execution for CRM, calendar, Drive, Notion, Stripe, and browser tools.
-- Durable conversation storage with human handoff.
-- Multi-tenant business profiles with per-tenant budgets and channel adapters (WhatsApp, Instagram, Gmail, Google Business).
-- Observability traces for tool calls, latency, token cost, and retrieval quality.
-- Live Stripe Checkout and CRM lead capture behind explicit production credentials.
+The forward-looking work is tracked as prepared branches, one concern each — see the [HAVE / NOT YET table](#have--not-yet) for the full list and `docs/prs/` for each design. In rough dependency order: durable sessions → audit log + kill switch → HITL actions → SMS webhook → voice → calendar/CRM adapters → MCP runtime → DLP redaction → (last, optional) live Stripe. Multi-tenant budgets and auth come from the stacked PRs #1–#3. Observability traces for tool calls, latency, cost, and retrieval quality remain an unscheduled idea.
 
 ## Contributing
 

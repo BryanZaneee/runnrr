@@ -8,6 +8,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 EasyAgent is a portable framework for reusable agentic AI across multiple model providers. Bryan's personal site runs a profile on top of it (the bundled `personal-agent` showcase profile under `profiles/personal-agent/`), but the engine is meant to support many professional agent profiles with different knowledge bases and tools.
 
+**Product: Runnrr.** EasyAgent is the internal engine name; Runnrr (two n, two r) is the BZS Software product that will run on it. Customer-facing copy says Runnrr; the repo and Python package stay `easyagent` — do not mass-rename. The README's "Runnrr engine map" section is the canonical mapping.
+
+### Runnrr context (read before touching the loop or adding a channel)
+
+- **Channel adapters sit outside the loop.** SMS/voice (Twilio) adapters are routers in front of `POST /api/chat` with a durable session key — never a second harness. No vendored DeepSeek Harness / Hermes / OpenClaw for client traffic; steal the ideas only (append-only transcripts, one agent / one job / one tool pack).
+- **Prefix-cache rules** (PR #9): append-only messages; freeze system prompt + tool schemas per session; inject volatile data (time, caller id) after the cached prefix; append a correction instead of editing a bad tool result. Full list in the README.
+- **Inbound SMS/voice profiles get a tiny tool pack** (FAQ, book, note, transfer). No shell, no MCP, no browser, no `web_search`.
+- **Stacked SaaS PRs #1 → #2 → #3 are open on purpose.** Never merge, close, rebase, or squash them from unrelated work. New work branches from `main`.
+- **Prepared branches** (draft PRs, body = `docs/prs/<branch>.md`, skipped contract tests, no implementations): `feat/durable-sessions`, `feat/audit-log-kill-switch`, `feat/hitl-actions`, `feat/channel-webhooks`, `feat/channel-voice`, `feat/calendar-crm-adapters`, `feat/mcp-runtime`, `feat/dlp-redact`. `feat/stripe-live` is last and not started. One concern per branch; no live Twilio/Stripe keys — env vars and docs only.
+
 Bundled profiles under `profiles/`:
 
 - `personal-agent` — personal-site candidate-advocate (default). Tools: KB + semantic RAG + `web_search`.

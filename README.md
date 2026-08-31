@@ -10,6 +10,7 @@ The engine is provider-agnostic and business-agnostic: profiles, knowledge bases
 - [`profiles/customer-service/`](./profiles/customer-service/) — tier-1 in-widget support agent for a fictional coffee shop, with a self-contained KB and an adaptation `TEMPLATE.md`.
 - [`profiles/research-analyst/`](./profiles/research-analyst/) — public research with web search, safe page fetching, and a calculator.
 - [`profiles/sales-concierge/`](./profiles/sales-concierge/) — catalog lookup, lead qualification, and preview-only lead/checkout flows.
+- [`profiles/bzs-concierge/`](./profiles/bzs-concierge/) — public concierge demo for bzssoftware.com: catalog-backed discovery, lead qualification, and preview-only lead capture (no checkout tool).
 - [`profiles/frampton/`](./profiles/frampton/) — Dark Souls 1 guide grounded in a public Fextralife scrape committed at `kb/frampton/`.
 
 Tier-2 multi-channel/multi-tenant agents (WhatsApp, Instagram, Gmail, Google Business) need a different runtime (channel adapters, queues, durable state) and will live in their own deployment when built — they are out of scope for this engine.
@@ -145,6 +146,15 @@ This public repo does **not** include the personal knowledge base, resume files,
 - Observability traces for tool calls, latency, token cost, and retrieval quality.
 - Live Stripe Checkout and CRM lead capture behind explicit production credentials.
 
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) is the source of truth for branch naming, commit format, and the PR flow. Two repo-specific rules on top of it:
+
+- `.venv/bin/python -m pytest -v` must pass before you open a PR, and behavioral changes need tests.
+- Never commit `kb/` content (except the tracked `kb/frampton/` scrape), `.env` files, or provider keys — see [Privacy boundary](#privacy-boundary) above.
+
 ## License
 
-MIT
+[MIT](LICENSE)

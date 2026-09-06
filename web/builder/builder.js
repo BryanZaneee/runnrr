@@ -1,5 +1,5 @@
-// EasyAgent Agent Builder — no-code agent creation + a live "try it" chat pane.
-// Talks to the gated /api/builder/* write API (backend/builder.py) plus the
+// Runnrr Agent Builder — no-code agent creation + a live "try it" chat pane.
+// Talks to the gated /api/builder/* write API (runnrr/builder.py) plus the
 // existing read-only /api/tools, /api/profiles, /api/models, /api/chat.
 
 // Only these tools are shown to non-technical builders; everything else in
@@ -88,10 +88,10 @@ let state = {
 // ---------- API base (same localStorage pattern as web/app.js) ----------
 
 function ownerToken() {
-  let t = localStorage.getItem("easyagent-builder-owner");
+  let t = localStorage.getItem("runnrr-builder-owner");
   if (!t) {
     t = crypto.randomUUID();
-    localStorage.setItem("easyagent-builder-owner", t);
+    localStorage.setItem("runnrr-builder-owner", t);
   }
   return t;
 }

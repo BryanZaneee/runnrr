@@ -1,0 +1,12 @@
+[Unit]
+Description=Runnrr AI Agent Backend
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/runnrr
+Environment="PATH=/opt/runnrr/.venv/bin"
+ExecStart=/opt/runnrr/.venv/bin/python -m uvicorn runnrr.app:app --port 8001
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

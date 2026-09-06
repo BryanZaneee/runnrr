@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import backend.rag.retriever as retriever_mod
-from backend.rag.chunker import Chunk
-from backend.rag.embeddings import FakeEmbeddingProvider
-from backend.rag.reranker import RERANK_CANDIDATES
-from backend.rag.retriever import (
+import runnrr.rag.retriever as retriever_mod
+from runnrr.rag.chunker import Chunk
+from runnrr.rag.embeddings import FakeEmbeddingProvider
+from runnrr.rag.reranker import RERANK_CANDIDATES
+from runnrr.rag.retriever import (
     RetrievalResult,
     Retriever,
     hybrid_candidate_pool,

@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.kb_loader import search_kb
-from backend.profiles import AgentProfile, load_profile
+from runnrr.kb_loader import search_kb
+from runnrr.profiles import AgentProfile, load_profile
 
 
 def test_customer_service_profile_loads():
@@ -133,7 +133,7 @@ def test_mcp_servers_field_round_trips(tmp_path, monkeypatch):
         ],
     }))
 
-    from backend import profiles as profiles_mod
+    from runnrr import profiles as profiles_mod
 
     monkeypatch.setattr(profiles_mod, "PROFILE_ROOT", fake_root)
     p = load_profile("fixture-cs")
@@ -153,10 +153,10 @@ def test_mcp_servers_field_round_trips(tmp_path, monkeypatch):
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    from backend import config
+    from runnrr import config
 
     importlib.reload(config)
-    from backend import app as app_module
+    from runnrr import app as app_module
 
     importlib.reload(app_module)
     app_module.limiter.enabled = False
@@ -200,7 +200,7 @@ def test_api_profile_includes_allowed_tool_schemas(client):
 
 
 def test_api_profile_skips_missing_tool_schemas(client, monkeypatch, tmp_path):
-    from backend import app as app_module
+    from runnrr import app as app_module
 
     monkeypatch.setattr(
         app_module,

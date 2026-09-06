@@ -1,10 +1,22 @@
-# EasyAgent — Architectural History
+# Runnrr — Architectural History
 
 A running log of decisions that future agents (or future-me) can't recover from reading
 the source code alone. New decisions go at the top, dated. Each entry should answer
 **why** the choice was made and **what was rejected**.
 
-> **Naming note:** the framework is **EasyAgent**. The personal-site agent profile is now **Personal Agent**, bundled under `profiles/personal-agent/` as the showcase example. Older entries below may refer to the former **Strauss** name — read them in that historical context.
+> **Naming note:** the product is **Runnrr** (formerly **EasyAgent**, formerly **Strauss**). Entries below the 2026-09-06 line use the older names and `backend/` paths — read them in that historical context; the code they describe is the same engine.
+
+---
+
+## 2026-09-06 — EasyAgent becomes Runnrr
+
+### Decision: Rename in place and pivot to a single-tenant business runtime
+
+**Choice:** Rename the repo, package (`backend/` → `runnrr/`), env prefix (`EASYAGENT_*` → `RUNNRR_*`), loggers, and service unit in one mechanical PR with zero behavior change, then cut the personal-site profiles, the public Agent Builder, and the Gemini provider in follow-up PRs. Runnrr is one runtime per business (customer's Mac or a per-customer container), Supabase Auth from the start, a sandbox workspace per agent, and one SQLite file for sessions/audit/approvals. The bryanzane.com deploy is frozen at tag `v0.1.0-easyagent-final`. The full sequence is `docs/plans/runnrr-analysis.md`.
+
+**Why:** The engine already had the pieces a business agent needs (profiles, tool registry, prefix-cache discipline, honest token accounting). What it lacked — writable workspace, durable state, auth, a settings surface — is additive. Renaming first keeps every later PR's diff about behavior, not names.
+
+**Rejected:** (1) The name-only split from PR #10 ("Runnrr is a product name, no sandbox") — a business agent without a workspace cannot do paperwork. (2) The multi-tenant SaaS control plane from PRs #1–#3 — `tenant_id` everywhere, Supabase tables for business data; a per-business runtime keeps data with the customer and needs none of it. Only `backend/auth.py` (Supabase JWT verification) is salvaged. (3) Keeping the draft PRs #11–#18 open — their design docs are folded into `docs/roadmap/` with acceptance lists.
 
 ---
 

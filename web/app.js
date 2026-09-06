@@ -1,4 +1,4 @@
-// EasyAgent technical dashboard — read-only view of runtime state via REST APIs.
+// Runnrr technical dashboard — read-only view of runtime state via REST APIs.
 
 const ENDPOINTS = [
   { method: "GET", path: "/api/status", note: "Aggregated runtime, budget, limits, registry" },

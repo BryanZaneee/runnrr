@@ -1,4 +1,4 @@
-// EasyAgent eval dashboard — read-only RAG eval runs via gated /api/evals/* endpoints.
+// Runnrr eval dashboard — read-only RAG eval runs via gated /api/evals/* endpoints.
 
 const METRICS = ["recall_at_k", "context_precision", "faithfulness", "answer_relevance"];
 

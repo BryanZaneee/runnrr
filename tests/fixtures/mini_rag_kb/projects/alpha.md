@@ -2,7 +2,7 @@
 
 Project Alpha is a portable agent framework written in Python. It powers
 several customer-facing demos and is the canonical reference implementation
-for hybrid retrieval inside the EasyAgent ecosystem.
+for hybrid retrieval inside the Runnrr ecosystem.
 
 ## Overview
 

@@ -29,8 +29,8 @@ def _valid_body(**overrides) -> dict:
 def builder_client(client, tmp_path, monkeypatch):
     """Client with the builder enabled and an isolated profile tree."""
     c, app_module = client
-    from backend import config
-    from backend import profiles as profiles_module
+    from runnrr import config
+    from runnrr import profiles as profiles_module
 
     profiles_root = tmp_path / "profiles"
     profiles_root.mkdir()
@@ -59,7 +59,7 @@ class TestGating:
         assert r.status_code == 404
 
     def test_tools_catalog_is_always_available(self, client):
-        from backend.tools.schemas import DEFAULT_TOOL_NAMES
+        from runnrr.tools.schemas import DEFAULT_TOOL_NAMES
 
         c, _ = client
         r = c.get("/api/tools")
@@ -285,8 +285,8 @@ class TestBuilderToolAllowlist:
         assert not (profiles_root / "shop").exists()
 
     def test_catalog_tools_provision_demo_catalog(self, builder_client):
-        from backend.profiles import load_profile
-        from backend.tools import run_tool
+        from runnrr.profiles import load_profile
+        from runnrr.tools import run_tool
 
         c, _, profiles_root = builder_client
         r = c.post(
@@ -315,7 +315,7 @@ class TestBuilderToolAllowlist:
 
 class TestBuilderLimits:
     def test_profile_cap(self, builder_client, monkeypatch):
-        from backend import config
+        from runnrr import config
 
         c, _, _ = builder_client
         monkeypatch.setattr(config, "MAX_BUILDER_PROFILES", 1)
@@ -332,7 +332,7 @@ class TestBuilderLimits:
         )
 
     def test_note_cap_blocks_new_but_not_overwrite(self, builder_client, monkeypatch):
-        from backend import config
+        from runnrr import config
 
         c, _, _ = builder_client
         monkeypatch.setattr(config, "MAX_NOTES_PER_PROFILE", 1)
@@ -386,9 +386,9 @@ class TestBuilderLimits:
 class TestBuilderRateLimit:
     def test_rapid_saves_hit_429(self, builder_client):
         # Toggle the limiter instance the builder decorators are bound to
-        # (module reloads elsewhere can leave backend.ratelimit.limiter as a
+        # (module reloads elsewhere can leave runnrr.ratelimit.limiter as a
         # different, newer instance).
-        from backend import builder as builder_module
+        from runnrr import builder as builder_module
 
         c, app_module, _ = builder_client
         lim = builder_module.limiter
@@ -596,7 +596,7 @@ class TestBuilderSkills:
         assert "1. Ask for the order number." in text
 
     def test_skill_reaches_the_agent_system_prompt(self, builder_client):
-        from backend.profiles import load_profile
+        from runnrr.profiles import load_profile
 
         c, _, profiles_root = builder_client
         c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER)
@@ -652,12 +652,12 @@ class TestBuilderSkills:
         assert r.status_code == 409
 
     def test_read_skill_is_allowlisted(self):
-        from backend.builder import BUILDER_ALLOWED_TOOLS
+        from runnrr.builder import BUILDER_ALLOWED_TOOLS
 
         assert "read_skill" in BUILDER_ALLOWED_TOOLS
 
     def test_skill_cap_enforced(self, builder_client, monkeypatch):
-        from backend import config
+        from runnrr import config
 
         monkeypatch.setattr(config, "MAX_SKILLS_PER_PROFILE", 2)
         c, _, profiles_root = builder_client

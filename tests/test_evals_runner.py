@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from backend.evals.datasets import RagCase, RagDataset
-from backend.evals.runner import RAGEvaluator
-from backend.profiles import AgentProfile
-from backend.providers.base import Event
-from backend.rag.embeddings import FakeEmbeddingProvider
-from backend.rag.indexer import Indexer
+from runnrr.evals.datasets import RagCase, RagDataset
+from runnrr.evals.runner import RAGEvaluator
+from runnrr.profiles import AgentProfile
+from runnrr.providers.base import Event
+from runnrr.rag.embeddings import FakeEmbeddingProvider
+from runnrr.rag.indexer import Indexer
 from tests.conftest import FakeProvider
 
 MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
@@ -29,9 +29,9 @@ def mini_rag_env(sqlite_vec_available, tmp_path, monkeypatch):
     shutil.copytree(MINI_RAG_FIXTURE, kb)
     index_dir = tmp_path / "indexes" / "mini"
     runs_root = tmp_path / "runs"
-    monkeypatch.setenv("EASYAGENT_EMBEDDING_BACKEND", "fake")
+    monkeypatch.setenv("RUNNRR_EMBEDDING_BACKEND", "fake")
     import importlib
-    from backend import config
+    from runnrr import config
 
     importlib.reload(config)
     monkeypatch.setattr(config, "EMBEDDING_BACKEND", "fake")

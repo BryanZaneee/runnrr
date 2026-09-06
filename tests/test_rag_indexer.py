@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from backend.profiles import AgentProfile
-from backend.rag.embeddings import FakeEmbeddingProvider
-from backend.rag.indexer import Indexer
-from backend.rag.pca import PCA_FILENAME, load_pca_sidecar, project_query
-from backend.rag.retriever import get_retriever_for_profile
+from runnrr.profiles import AgentProfile
+from runnrr.rag.embeddings import FakeEmbeddingProvider
+from runnrr.rag.indexer import Indexer
+from runnrr.rag.pca import PCA_FILENAME, load_pca_sidecar, project_query
+from runnrr.rag.retriever import get_retriever_for_profile
 
 MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
 
@@ -135,7 +135,7 @@ def test_get_retriever_cache_ignores_provider_identity(
     tmp_path,
     mini_profile,
 ) -> None:
-    # Two DISTINCT provider instances with identical backend/model/dim must share
+    # Two DISTINCT provider instances with identical runnrr/model/dim must share
     # the cache entry. The cache key no longer keys on id(embedding_provider), so
     # wrapping/re-instantiating a provider (common in tests) is not a cache miss.
     index_dir = tmp_path / "index"
@@ -269,7 +269,7 @@ def test_cli_build_info_and_query_with_fake_backend(
     )
     index_root = tmp_path / "indexes"
 
-    from backend.rag import cli
+    from runnrr.rag import cli
 
     assert cli.main(
         [
@@ -334,7 +334,7 @@ def test_indexer_writes_pca_sidecar(sqlite_vec_available, tmp_path, mini_profile
     assert all(len(row) == 64 for row in payload["components"])
     assert len(payload["points"]) == report.total_chunks
 
-    from backend.rag.vector_index import VectorIndex
+    from runnrr.rag.vector_index import VectorIndex
 
     vector = VectorIndex(index_dir / "index.sqlite", dim=64)
     try:

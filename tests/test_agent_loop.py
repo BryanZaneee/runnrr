@@ -15,12 +15,12 @@ from typing import Any, AsyncIterator
 
 import pytest
 
-from backend.agent import run_conversation_stream
-from backend.profiles import AgentProfile
-from backend.providers.base import Event
-from backend.rag.embeddings import FakeEmbeddingProvider
-from backend.rag.indexer import Indexer
-from backend.tools import SCHEMAS, ToolResult
+from runnrr.agent import run_conversation_stream
+from runnrr.profiles import AgentProfile
+from runnrr.providers.base import Event
+from runnrr.rag.embeddings import FakeEmbeddingProvider
+from runnrr.rag.indexer import Indexer
+from runnrr.tools import SCHEMAS, ToolResult
 
 MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
 
@@ -396,7 +396,7 @@ class TestOneToolHop:
         monkeypatch,
     ):
         pytest.importorskip("sqlite_vec")
-        from backend import config
+        from runnrr import config
 
         kb = tmp_path / "mini_rag_kb"
         shutil.copytree(MINI_RAG_FIXTURE, kb)
@@ -555,7 +555,7 @@ class TestHopLimit:
     @pytest.mark.asyncio
     async def test_max_hops_yields_error(self, monkeypatch, kb_root):
         # Squeeze the cap to keep the test fast and obvious.
-        from backend import agent
+        from runnrr import agent
         monkeypatch.setattr(agent, "MAX_TOOL_HOPS", 3)
 
         infinite_tool_call = [

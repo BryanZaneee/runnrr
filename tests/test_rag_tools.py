@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from backend.profiles import AgentProfile
-from backend.rag.embeddings import FakeEmbeddingProvider
-from backend.rag.indexer import Indexer
-from backend.tools import run_tool
+from runnrr.profiles import AgentProfile
+from runnrr.rag.embeddings import FakeEmbeddingProvider
+from runnrr.rag.indexer import Indexer
+from runnrr.tools import run_tool
 
 MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
 
@@ -25,7 +25,7 @@ def semantic_profile(tmp_path, monkeypatch) -> AgentProfile:
     shutil.copytree(MINI_RAG_FIXTURE, kb)
     index_root = tmp_path / "indexes"
 
-    from backend import config
+    from runnrr import config
 
     monkeypatch.setattr(config, "RAG_INDEX_ROOT", index_root)
     monkeypatch.setattr(config, "EMBEDDING_BACKEND", "fake")
@@ -117,7 +117,7 @@ def test_semantic_search_respects_profile_allowlist(
 
 def test_semantic_search_reports_missing_index(tmp_path, monkeypatch) -> None:
     pytest.importorskip("sqlite_vec")
-    from backend import config
+    from runnrr import config
 
     monkeypatch.setattr(config, "RAG_INDEX_ROOT", tmp_path / "missing-indexes")
     monkeypatch.setattr(config, "EMBEDDING_BACKEND", "fake")

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.evals import graders
+from runnrr.evals import graders
 
 
 def test_dedupe_collapses_repeats_for_recall_and_precision():
@@ -77,7 +77,7 @@ def test_default_grade_fn_uses_complete_json(monkeypatch):
         calls.append(prompt)
         return {"score": 7, "reasoning": "patched"}
 
-    monkeypatch.setattr("backend.llm_json.complete_json", fake_complete_json)
+    monkeypatch.setattr("runnrr.llm_json.complete_json", fake_complete_json)
 
     result = graders.grade_faithfulness("my answer", "my context")
     assert result.score == pytest.approx(0.7)

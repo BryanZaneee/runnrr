@@ -8,9 +8,9 @@ from typing import Any, AsyncIterator
 
 from fastapi.testclient import TestClient
 
-from backend.profiles import AgentProfile
-from backend.providers.base import Event
-from backend.tools import SCHEMAS, ToolResult
+from runnrr.profiles import AgentProfile
+from runnrr.providers.base import Event
+from runnrr.tools import SCHEMAS, ToolResult
 
 
 class _LoopFake:
@@ -65,7 +65,7 @@ def _stale_warn_profile_tree(
         encoding="utf-8",
     )
     (prof_dir / "system.md").write_text("Test profile.", encoding="utf-8")
-    from backend.profiles import load_profile
+    from runnrr.profiles import load_profile
 
     return profiles_root, load_profile(profile_id, profile_root=profiles_root)
 
@@ -125,7 +125,7 @@ class TestRagIndexStatus:
 
     def test_rag_index_endpoint_for_missing_index(self, client, tmp_path, monkeypatch):
         c, app_module = client
-        from backend import config
+        from runnrr import config
 
         profile = _rag_profile(tmp_path, profile_id="missing-rag")
         monkeypatch.setattr(config, "RAG_INDEX_ROOT", tmp_path / "indexes")
@@ -144,8 +144,8 @@ class TestRagIndexStatus:
 
     def test_rag_index_endpoint_for_current_index(self, client, tmp_path, monkeypatch):
         c, app_module = client
-        from backend import config
-        from backend.rag.indexer import Indexer
+        from runnrr import config
+        from runnrr.rag.indexer import Indexer
 
         profile = _rag_profile(tmp_path, profile_id="current-rag")
         monkeypatch.setattr(config, "RAG_INDEX_ROOT", tmp_path / "indexes")
@@ -166,8 +166,8 @@ class TestRagIndexStatus:
 
     def test_rag_index_endpoint_for_stale_index(self, client, tmp_path, monkeypatch):
         c, app_module = client
-        from backend import config
-        from backend.rag.indexer import Indexer
+        from runnrr import config
+        from runnrr.rag.indexer import Indexer
 
         profile = _rag_profile(tmp_path, profile_id="stale-rag")
         monkeypatch.setattr(config, "RAG_INDEX_ROOT", tmp_path / "indexes")
@@ -190,7 +190,7 @@ class TestRagIndexStatus:
 
     def test_rag_index_endpoint_for_corrupt_manifest(self, client, tmp_path, monkeypatch):
         c, app_module = client
-        from backend import config
+        from runnrr import config
 
         profile = _rag_profile(tmp_path, profile_id="bad-manifest")
         index_dir = tmp_path / "indexes" / profile.id
@@ -210,7 +210,7 @@ class TestRagIndexStatus:
 
     def test_rag_index_endpoint_for_embedding_misconfig(self, client, tmp_path, monkeypatch):
         c, app_module = client
-        from backend import config
+        from runnrr import config
 
         profile = _rag_profile(tmp_path, profile_id="embedding-bad")
         monkeypatch.setattr(config, "RAG_INDEX_ROOT", tmp_path / "indexes")
@@ -227,9 +227,9 @@ class TestRagIndexStatus:
 
     def test_rag_index_endpoint_for_dependency_error(self, client, tmp_path, monkeypatch):
         c, app_module = client
-        from backend import config
-        from backend.rag import indexer as indexer_module
-        from backend.rag.vector_index import VectorIndexDependencyError
+        from runnrr import config
+        from runnrr.rag import indexer as indexer_module
+        from runnrr.rag.vector_index import VectorIndexDependencyError
 
         class MissingDependencyIndexer:
             def __init__(self, profile):
@@ -256,11 +256,11 @@ class TestStaleIndexWarning:
     def test_current_index_emits_no_stale_warning(
         self, tmp_path, monkeypatch, caplog
     ):
-        from backend import app as app_module
-        from backend import config
-        from backend import profiles as profiles_module
-        from backend.app import warn_stale_indexes
-        from backend.rag.indexer import Indexer
+        from runnrr import app as app_module
+        from runnrr import config
+        from runnrr import profiles as profiles_module
+        from runnrr.app import warn_stale_indexes
+        from runnrr.rag.indexer import Indexer
 
         profiles_root, profile = _stale_warn_profile_tree(
             tmp_path, profile_id="warn-current"
@@ -273,17 +273,17 @@ class TestStaleIndexWarning:
 
         Indexer(profile).build(force=True)
 
-        with caplog.at_level(logging.WARNING, logger="easyagent"):
+        with caplog.at_level(logging.WARNING, logger="runnrr"):
             warn_stale_indexes()
 
         stale_records = [r for r in caplog.records if r.message == "rag_index_stale"]
         assert stale_records == []
 
     def test_missing_index_emits_stale_warning(self, tmp_path, monkeypatch, caplog):
-        from backend import app as app_module
-        from backend import config
-        from backend import profiles as profiles_module
-        from backend.app import warn_stale_indexes
+        from runnrr import app as app_module
+        from runnrr import config
+        from runnrr import profiles as profiles_module
+        from runnrr.app import warn_stale_indexes
 
         profiles_root, profile = _stale_warn_profile_tree(
             tmp_path, profile_id="warn-missing"
@@ -294,7 +294,7 @@ class TestStaleIndexWarning:
         monkeypatch.setattr(profiles_module, "PROFILE_ROOT", profiles_root)
         monkeypatch.setattr(app_module, "PROFILE_ROOT", profiles_root)
 
-        with caplog.at_level(logging.WARNING, logger="easyagent"):
+        with caplog.at_level(logging.WARNING, logger="runnrr"):
             warn_stale_indexes()
 
         stale_records = [r for r in caplog.records if r.message == "rag_index_stale"]
@@ -306,7 +306,7 @@ class TestStaleIndexWarning:
 class TestAbuseProtection:
     def test_budget_exhausted_returns_503(self, client, monkeypatch, fake_provider_cls):
         c, app_module = client
-        from backend.budget import TOKEN_BUDGET
+        from runnrr.budget import TOKEN_BUDGET
 
         TOKEN_BUDGET.record(TOKEN_BUDGET.daily_limit)
 
@@ -322,7 +322,7 @@ class TestAbuseProtection:
 
     def test_budget_records_actual_usage(self, client, monkeypatch):
         c, app_module = client
-        from backend.budget import TOKEN_BUDGET
+        from runnrr.budget import TOKEN_BUDGET
 
         fake = _LoopFake(
             [
@@ -382,11 +382,11 @@ class TestAbuseProtection:
         monkeypatch.setenv("RATE_LIMIT_ENABLED", "1")
 
         import importlib
-        from backend import config, ratelimit
+        from runnrr import config, ratelimit
 
         importlib.reload(config)
         importlib.reload(ratelimit)  # limiter is built from RATE_LIMIT_* at import
-        from backend import app as app_module
+        from runnrr import app as app_module
 
         importlib.reload(app_module)
         c = TestClient(app_module.app)

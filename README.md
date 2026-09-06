@@ -1,8 +1,19 @@
-# EasyAgent
+# Runnrr
 
-EasyAgent is a portable framework for building reusable agentic AI apps across different model providers. Define an agent profile, give it a focused local knowledge base and toolset, then run it through Claude, OpenAI, Gemini, Kimi, or DeepSeek without rewriting the workflow each time.
+Runnrr (formerly EasyAgent) is a self-hosted business-task agent runtime: one runtime per
+business, running continuously on the owner's Mac or in a per-customer cloud container,
+reached through a web UI with a Supabase login. Each agent works inside its own sandbox
+workspace (files + shell), reads a curated knowledge base, and runs on whichever model
+provider is cheapest for the job (DeepSeek V4 Flash by default; Claude, OpenAI, and Kimi
+are one profile setting away). Keys stay server-side; clients talk to the FastAPI runtime
+over SSE and never see provider credentials.
 
-The engine is provider-agnostic and business-agnostic: profiles, knowledge bases, providers, and tools are separated so the same loop can power a personal-site agent, a customer-support bot, a sales assistant, or an internal-ops agent. Keys stay server-side; browsers talk to the FastAPI backend over SSE and never see provider credentials.
+The engine is provider-agnostic and business-agnostic: profiles, knowledge bases,
+providers, and tools are separated so the same loop can power an invoice clerk, a
+customer-support bot, a sales assistant, or an internal-ops agent. The overhaul that turns
+the former EasyAgent engine into this product is tracked in
+[`docs/plans/runnrr-analysis.md`](./docs/plans/runnrr-analysis.md); deferred features live
+in [`docs/roadmap/`](./docs/roadmap/).
 
 ## Bundled profiles
 
@@ -37,11 +48,11 @@ TAVILY_API_KEY=...   # optional; needed for web_search / Research Analyst
 Run the backend, then (optionally) the local dashboard:
 
 ```bash
-.venv/bin/python -m uvicorn backend.app:app --reload --port 8001
+.venv/bin/python -m uvicorn runnrr.app:app --reload --port 8001
 .venv/bin/python -m http.server 8000 --directory web
 ```
 
-Visit `http://localhost:8000` for the dashboard (it defaults to `http://127.0.0.1:8001` for API calls). The public chat UI lives in the separate [`bryanzane_v3`](https://github.com/BryanZaneee/bryanzane_v3) repo under `easyagent/`, deployed at [bryanzane.com/easyagent](https://bryanzane.com/easyagent/).
+Visit `http://localhost:8000` for the dashboard (it defaults to `http://127.0.0.1:8001` for API calls). The public chat UI lives in the separate [`bryanzane_v3`](https://github.com/BryanZaneee/bryanzane_v3) repo under `runnrr/`, deployed at [bryanzane.com/runnrr](https://bryanzane.com/runnrr/).
 
 ## Agent Builder (local)
 
@@ -49,7 +60,7 @@ A no-code page for creating and configuring an agent, then trying it immediately
 
 ```bash
 echo "ENABLE_PROFILE_EDITOR=1" >> .env
-.venv/bin/python -m uvicorn backend.app:app --reload --port 8001
+.venv/bin/python -m uvicorn runnrr.app:app --reload --port 8001
 .venv/bin/python -m http.server 8000 --directory web
 ```
 
@@ -70,17 +81,17 @@ A no-build vanilla page for runtime health: provider/key status, available model
 `semantic_search_kb` is additive to `search_kb` (literal keyword/regex) and only appears for profiles that list it in `profile.json`. Build and query a profile index with the CLI:
 
 ```bash
-# Build (Voyage embeddings). Free tier without a payment method: EASYAGENT_EMBED_BATCH_SIZE=8
-VOYAGE_API_KEY=... EASYAGENT_EMBEDDING_BACKEND=voyage \
-  .venv/bin/python -m backend.rag.cli build personal-agent
-.venv/bin/python -m backend.rag.cli info personal-agent
-.venv/bin/python -m backend.rag.cli query personal-agent "portable profile retrieval" --k 3
+# Build (Voyage embeddings). Free tier without a payment method: RUNNRR_EMBED_BATCH_SIZE=8
+VOYAGE_API_KEY=... RUNNRR_EMBEDDING_BACKEND=voyage \
+  .venv/bin/python -m runnrr.rag.cli build personal-agent
+.venv/bin/python -m runnrr.rag.cli info personal-agent
+.venv/bin/python -m runnrr.rag.cli query personal-agent "portable profile retrieval" --k 3
 
 # Model-free local fixtures / CI use the deterministic fake backend:
-.venv/bin/python -m backend.rag.cli --backend fake build customer-service
+.venv/bin/python -m runnrr.rag.cli --backend fake build customer-service
 ```
 
-Indexes live under `profiles/<id>/.index/` (git-ignored); set `EASYAGENT_RAG_INDEX_ROOT=/path` to relocate. Retrieval is hybrid BM25 + dense vectors fused with RRF; set `EASYAGENT_RERANK=1` to enable the optional LLM reranker. **Rebuild after any KB change** — chat boot only warns on a stale index, it never rebuilds in the request path. A long-running dev server caches the manifest and retriever, so restart it after rebuilding.
+Indexes live under `profiles/<id>/.index/` (git-ignored); set `RUNNRR_RAG_INDEX_ROOT=/path` to relocate. Retrieval is hybrid BM25 + dense vectors fused with RRF; set `RUNNRR_RERANK=1` to enable the optional LLM reranker. **Rebuild after any KB change** — chat boot only warns on a stale index, it never rebuilds in the request path. A long-running dev server caches the manifest and retriever, so restart it after rebuilding.
 
 ### Evals
 
@@ -88,13 +99,13 @@ Measure retrieval and answer quality before shipping prompt, tool, or retrieval 
 
 ```bash
 # Retrieval-only quality (no model keys needed with --backend fake)
-.venv/bin/python -m backend.evals.cli --backend fake run personal-agent \
+.venv/bin/python -m runnrr.evals.cli --backend fake run personal-agent \
   --mode retrieval-only --variants keyword,hybrid,hybrid_rerank --k 5
 
-.venv/bin/python -m backend.evals.cli list personal-agent
-.venv/bin/python -m backend.evals.cli compare personal-agent \
+.venv/bin/python -m runnrr.evals.cli list personal-agent
+.venv/bin/python -m runnrr.evals.cli compare personal-agent \
   --latest --baseline keyword --candidate hybrid
-.venv/bin/python -m backend.evals.cli report personal-agent --latest
+.venv/bin/python -m runnrr.evals.cli report personal-agent --latest
 ```
 
 Runs persist under `profiles/<id>/evals/runs/<run_id>/` as `records.jsonl` + `summary.json`. Metrics include `recall_at_k`, `context_precision`, `reciprocal_rank` (MRR), and—on end-to-end runs—`faithfulness`, `answer_relevance`, and `answer_vs_ground_truth`.
@@ -124,7 +135,7 @@ To activate it, set `DEFAULT_PROFILE=my-agent` and restart, or pass `?profile_id
 - `source_path_labels` — ordered `[match, label]` pairs mapping KB paths to public source labels in the UI (trailing `/` matches by prefix, else exact; first match wins), e.g. `[["menu/", "Menu"], ["policies/", "Store policy"]]`.
 - `mcp_servers` — standard MCP stdio configs. Parsed and shown in the agent-info panel today; full MCP client execution is a follow-up.
 
-Native tools live in `backend/tools/` and `backend/rag/tools.py`. Each is a `ToolDef` pairing its schema, handler, and browser-safe source metadata; profiles only see the tools they list. Use native tools for small, stable server-owned capabilities (KB reads, web search, URL fetch, calculator, catalog/lead/checkout previews). The Sales Concierge tools are intentionally safe demos — `lead_capture_preview` does not persist to a CRM and `checkout_link_preview` does not touch Stripe.
+Native tools live in `runnrr/tools/` and `runnrr/rag/tools.py`. Each is a `ToolDef` pairing its schema, handler, and browser-safe source metadata; profiles only see the tools they list. Use native tools for small, stable server-owned capabilities (KB reads, web search, URL fetch, calculator, catalog/lead/checkout previews). The Sales Concierge tools are intentionally safe demos — `lead_capture_preview` does not persist to a CRM and `checkout_link_preview` does not touch Stripe.
 
 ## Privacy boundary
 
@@ -144,6 +155,12 @@ This public repo does **not** include the personal knowledge base, resume files,
 - Multi-tenant business profiles with per-tenant budgets and channel adapters (WhatsApp, Instagram, Gmail, Google Business).
 - Observability traces for tool calls, latency, token cost, and retrieval quality.
 - Live Stripe Checkout and CRM lead capture behind explicit production credentials.
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for branch naming, commit format, and the PR
+template. Run the tests with `.venv/bin/python -m pytest -q`. Never commit `.env*`
+(other than `.env.example`), `kb/` content, `workspace/`, or `data/`.
 
 ## License
 

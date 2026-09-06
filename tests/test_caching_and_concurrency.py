@@ -13,8 +13,8 @@ import time
 
 import pytest
 
-from backend.agent import run_conversation_stream
-from backend.profiles import load_profile
+from runnrr.agent import run_conversation_stream
+from runnrr.profiles import load_profile
 
 
 # --------------------------------------------------------------------------- #
@@ -24,7 +24,7 @@ from backend.profiles import load_profile
 
 class TestCacheBreakpoints:
     def test_system_block_carries_one_breakpoint(self):
-        from backend.providers.anthropic_provider import AnthropicProvider
+        from runnrr.providers.anthropic_provider import AnthropicProvider
 
         provider = AnthropicProvider.__new__(AnthropicProvider)
         blocks = provider.system_for_provider(load_profile("personal-agent"))
@@ -32,7 +32,7 @@ class TestCacheBreakpoints:
         assert blocks[0]["cache_control"] == {"type": "ephemeral"}
 
     def test_only_the_last_tool_carries_a_breakpoint(self):
-        from backend.providers.anthropic_provider import AnthropicProvider
+        from runnrr.providers.anthropic_provider import AnthropicProvider
 
         provider = AnthropicProvider.__new__(AnthropicProvider)
         schemas = provider.tools_for_provider(load_profile("personal-agent"))
@@ -41,7 +41,7 @@ class TestCacheBreakpoints:
         assert marked[0] is schemas[-1], "it must be the LAST tool (prefix caching)"
 
     def test_breakpoint_count_stays_within_the_api_limit(self):
-        from backend.providers.anthropic_provider import AnthropicProvider
+        from runnrr.providers.anthropic_provider import AnthropicProvider
 
         provider = AnthropicProvider.__new__(AnthropicProvider)
         profile = load_profile("personal-agent")
@@ -62,7 +62,7 @@ class TestCacheBreakpoints:
         """
         import json
 
-        from backend.providers.anthropic_provider import AnthropicProvider
+        from runnrr.providers.anthropic_provider import AnthropicProvider
 
         provider = AnthropicProvider.__new__(AnthropicProvider)
         profile = load_profile("personal-agent")
@@ -77,8 +77,8 @@ class TestCacheBreakpoints:
         assert first == second
 
     def test_tool_description_override_does_not_mutate_shared_schema(self):
-        from backend.providers.anthropic_provider import AnthropicProvider
-        from backend.tools.schemas import SCHEMAS_BY_NAME
+        from runnrr.providers.anthropic_provider import AnthropicProvider
+        from runnrr.tools.schemas import SCHEMAS_BY_NAME
 
         provider = AnthropicProvider.__new__(AnthropicProvider)
         provider.tools_for_provider(load_profile("personal-agent"))
@@ -179,11 +179,11 @@ async def test_tools_in_one_hop_run_concurrently(monkeypatch):
     from the async generator, so they ran serially AND blocked the event loop —
     on the single uvicorn worker that stalled every other in-flight stream.
     """
-    import backend.agent as agent_module
+    import runnrr.agent as agent_module
 
     def slow_tool(name, arguments, tool_use_id, **kwargs):
         time.sleep(0.1)
-        from backend.tools.results import ToolResult
+        from runnrr.tools.results import ToolResult
 
         return ToolResult(tool_use_id=tool_use_id, name=name, content="{}")
 
@@ -215,11 +215,11 @@ async def test_tools_in_one_hop_run_concurrently(monkeypatch):
 @pytest.mark.asyncio
 async def test_event_loop_stays_responsive_during_tools(monkeypatch):
     """A blocking tool must not stall the loop — that is the multi-tenant fix."""
-    import backend.agent as agent_module
+    import runnrr.agent as agent_module
 
     def slow_tool(name, arguments, tool_use_id, **kwargs):
         time.sleep(0.2)
-        from backend.tools.results import ToolResult
+        from runnrr.tools.results import ToolResult
 
         return ToolResult(tool_use_id=tool_use_id, name=name, content="{}")
 
@@ -263,13 +263,13 @@ async def test_parallel_tools_preserve_call_order(monkeypatch):
     Out-of-order tool results would make the message log non-deterministic, which
     destabilizes the very prefix the cache breakpoints rely on.
     """
-    import backend.agent as agent_module
+    import runnrr.agent as agent_module
 
     delays = {"t0": 0.15, "t1": 0.01, "t2": 0.08}
 
     def variable_tool(name, arguments, tool_use_id, **kwargs):
         time.sleep(delays[tool_use_id])
-        from backend.tools.results import ToolResult
+        from runnrr.tools.results import ToolResult
 
         return ToolResult(tool_use_id=tool_use_id, name=name, content="{}")
 
@@ -313,10 +313,10 @@ async def test_disconnect_midyield_leaves_a_valid_message_log(monkeypatch):
     tool_use turn with no matching tool_result. Every later request on that
     session_id then 400s on Anthropic and OpenAI, for the full 30-minute TTL.
     """
-    import backend.agent as agent_module
+    import runnrr.agent as agent_module
 
     def fast_tool(name, arguments, tool_use_id, **kwargs):
-        from backend.tools.results import ToolResult
+        from runnrr.tools.results import ToolResult
 
         return ToolResult(tool_use_id=tool_use_id, name=name, content="{}")
 

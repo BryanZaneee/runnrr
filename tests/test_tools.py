@@ -8,17 +8,17 @@ import json
 
 import pytest
 
-from backend.kb_loader import (
+from runnrr.kb_loader import (
     KBError,
     list_kb,
     read_file,
     search_kb,
 )
-from backend.profiles import DEFAULT_PROFILE_TOOLS, AgentProfile, load_profile
-from backend.tools import SCHEMAS, run_tool
-from backend.tools.definitions import ToolContext
-from backend.tools.personal_kb import get_project_context, get_resume_summary
-from backend.tools.registry import TOOL_DEFS, TOOL_DEFS_BY_NAME, TOOL_HANDLERS
+from runnrr.profiles import DEFAULT_PROFILE_TOOLS, AgentProfile, load_profile
+from runnrr.tools import SCHEMAS, run_tool
+from runnrr.tools.definitions import ToolContext
+from runnrr.tools.personal_kb import get_project_context, get_resume_summary
+from runnrr.tools.registry import TOOL_DEFS, TOOL_DEFS_BY_NAME, TOOL_HANDLERS
 
 
 # --------------------------------------------------------------------------- #
@@ -253,7 +253,7 @@ class TestRunTool:
         assert result.is_error is True
 
     def test_unexpected_tool_error_is_masked_by_default(self, monkeypatch):
-        from backend import config
+        from runnrr import config
 
         def explode(arguments, context):
             raise RuntimeError("secret internal failure")
@@ -269,7 +269,7 @@ class TestRunTool:
         assert "secret internal failure" not in result.content
 
     def test_unexpected_tool_error_reraises_in_debug_mode(self, monkeypatch):
-        from backend import config
+        from runnrr import config
 
         def explode(arguments, context):
             raise RuntimeError("secret internal failure")
@@ -364,7 +364,7 @@ class TestWebSearch:
                 },
             )
 
-        import backend.web_search as ws
+        import runnrr.web_search as ws
         monkeypatch.setattr(ws.httpx, "post", fake_post)
 
         result = run_tool(
@@ -391,7 +391,7 @@ class TestWebSearch:
         assert "TAVILY_API_KEY" in json.loads(result.content)["error"]
 
     def test_include_answer_is_in_schema_and_reaches_tavily(self, monkeypatch):
-        from backend.tools import SCHEMAS
+        from runnrr.tools import SCHEMAS
 
         schema = next(s for s in SCHEMAS if s["name"] == "web_search")
         assert "include_answer" in schema["input_schema"]["properties"]
@@ -403,7 +403,7 @@ class TestWebSearch:
             captured["json"] = json
             return _StubResponse(200, {"query": "q", "results": []})
 
-        import backend.web_search as ws
+        import runnrr.web_search as ws
         monkeypatch.setattr(ws.httpx, "post", fake_post)
 
         result = run_tool(
@@ -425,7 +425,7 @@ class TestWebSearch:
         def fake_post(url, json, timeout):  # noqa: A002
             return _StubResponse(429, text="rate limit")
 
-        import backend.web_search as ws
+        import runnrr.web_search as ws
         monkeypatch.setattr(ws.httpx, "post", fake_post)
 
         result = run_tool("web_search", {"query": "x"}, tool_use_id="ws4")
@@ -440,7 +440,7 @@ class TestWebSearch:
             captured["json"] = json
             return _StubResponse(200, {"query": "x", "answer": "", "results": []})
 
-        import backend.web_search as ws
+        import runnrr.web_search as ws
         monkeypatch.setattr(ws.httpx, "post", fake_post)
 
         run_tool("web_search", {"query": "x", "max_results": 999}, tool_use_id="ws5")
@@ -464,7 +464,7 @@ class TestWebSearch:
 
 class TestFetchUrlText:
     def test_fetches_public_text_page(self, monkeypatch):
-        import backend.tools.web_fetch as wf
+        import runnrr.tools.web_fetch as wf
 
         monkeypatch.setattr(
             wf.socket,
@@ -510,7 +510,7 @@ class TestFetchUrlText:
         assert result.is_error is True
 
     def test_rejects_non_text_content(self, monkeypatch):
-        import backend.tools.web_fetch as wf
+        import runnrr.tools.web_fetch as wf
 
         monkeypatch.setattr(
             wf.socket,

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from backend import config
-from backend.profiles import AgentProfile
-from backend.rag.chunker import chunk_markdown
-from backend.rag.embeddings import FakeEmbeddingProvider
-from backend.rag.indexer import Indexer
-from backend.rag.reranker import LLMReranker, RERANK_CANDIDATES
-from backend.rag.retriever import RetrievalResult
-from backend.rag.tools import semantic_search_kb
+from runnrr import config
+from runnrr.profiles import AgentProfile
+from runnrr.rag.chunker import chunk_markdown
+from runnrr.rag.embeddings import FakeEmbeddingProvider
+from runnrr.rag.indexer import Indexer
+from runnrr.rag.reranker import LLMReranker, RERANK_CANDIDATES
+from runnrr.rag.retriever import RetrievalResult
+from runnrr.rag.tools import semantic_search_kb
 
 
 def _results_from_markdown() -> list[RetrievalResult]:
@@ -128,8 +128,8 @@ def test_semantic_search_honors_rerank_enabled(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setattr(config, "RERANK_ENABLED", True)
     # The tool now reranks via run_hybrid_query, which lazily imports LLMReranker
-    # from its canonical module — patch there, not in backend.rag.tools.
-    monkeypatch.setattr("backend.rag.reranker.LLMReranker", StubReranker)
+    # from its canonical module — patch there, not in runnrr.rag.tools.
+    monkeypatch.setattr("runnrr.rag.reranker.LLMReranker", StubReranker)
 
     reranked_paths = [
         row["path"]

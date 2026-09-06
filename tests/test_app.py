@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.profiles import AgentProfile
+from runnrr.profiles import AgentProfile
 
 MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
 
@@ -90,8 +90,8 @@ class TestProfiles:
         assert "rag_index" not in r.json()
 
     def test_profile_with_unknown_tool_returns_400(self, client, monkeypatch):
-        from backend import app as app_module
-        from backend.profiles import ProfileConfigError
+        from runnrr import app as app_module
+        from runnrr.profiles import ProfileConfigError
 
         def boom(profile_id):
             raise ProfileConfigError(
@@ -105,14 +105,14 @@ class TestProfiles:
         assert "serch_kb" in r.json()["detail"]
 
     def test_personal_agent_profile_loads_aliases_and_labels(self):
-        from backend.profiles import load_profile
+        from runnrr.profiles import load_profile
 
         profile = load_profile("personal-agent")
         assert profile.project_aliases["bryanzane.com"] == "bryanzane-com"
         assert profile.source_labels["shuttrr"] == "Shuttrr"
 
     def test_personal_agent_profile_loads_source_path_labels(self):
-        from backend.profiles import load_profile
+        from runnrr.profiles import load_profile
 
         profile = load_profile("personal-agent")
         assert ("resume/resume.md", "Resume") in profile.source_path_labels
@@ -121,8 +121,8 @@ class TestProfiles:
     def test_list_profiles_logs_and_skips_broken(self, client, monkeypatch, tmp_path, caplog):
         import logging
 
-        from backend import app as app_module
-        from backend import profiles as profiles_module
+        from runnrr import app as app_module
+        from runnrr import profiles as profiles_module
 
         c, _ = client
         root = tmp_path / "profiles"
@@ -150,7 +150,7 @@ class TestProfiles:
         monkeypatch.setattr(app_module, "PROFILE_ROOT", root)
         monkeypatch.setattr(profiles_module, "PROFILE_ROOT", root)
 
-        with caplog.at_level(logging.WARNING, logger="easyagent"):
+        with caplog.at_level(logging.WARNING, logger="runnrr"):
             r = c.get("/api/profiles")
 
         assert r.status_code == 200
@@ -170,13 +170,13 @@ class TestSSEFormat:
     async def test_stream_exception_is_sanitized(self, caplog):
         import logging
 
-        from backend.app import _sse_format
+        from runnrr.app import _sse_format
 
         async def exploding_events():
             yield {"event": "delta", "text": "partial"}
             raise RuntimeError("sk-secret-123 internal detail")
 
-        with caplog.at_level(logging.ERROR, logger="easyagent"):
+        with caplog.at_level(logging.ERROR, logger="runnrr"):
             frames = [f async for f in _sse_format(exploding_events())]
 
         body = b"".join(frames).decode("utf-8")
@@ -297,9 +297,9 @@ class TestChat:
         parse_sse,
     ):
         pytest.importorskip("sqlite_vec")
-        from backend import config
-        from backend.rag.embeddings import FakeEmbeddingProvider
-        from backend.rag.indexer import Indexer
+        from runnrr import config
+        from runnrr.rag.embeddings import FakeEmbeddingProvider
+        from runnrr.rag.indexer import Indexer
 
         c, app_module = client
         kb = tmp_path / "mini_rag_kb"
@@ -484,9 +484,9 @@ class TestChat:
 class TestRagInspect:
     def _build_mini_rag(self, monkeypatch, tmp_path):
         pytest.importorskip("sqlite_vec")
-        from backend import config
-        from backend.rag.embeddings import FakeEmbeddingProvider
-        from backend.rag.indexer import Indexer
+        from runnrr import config
+        from runnrr.rag.embeddings import FakeEmbeddingProvider
+        from runnrr.rag.indexer import Indexer
 
         kb = tmp_path / "mini_rag_kb"
         shutil.copytree(MINI_RAG_FIXTURE, kb)

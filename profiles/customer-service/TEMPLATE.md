@@ -1,6 +1,6 @@
 # Customer-service profile — adaptation guide
 
-This profile ships as a working demo for a fictional neighborhood coffee shop ("Easy Coffee") so that a fresh clone of EasyAgent runs end-to-end against realistic content. To adapt it for a real business, copy this folder and swap the parts called out below.
+This profile ships as a working demo for a fictional neighborhood coffee shop ("Easy Coffee") so that a fresh clone of Runnrr runs end-to-end against realistic content. To adapt it for a real business, copy this folder and swap the parts called out below.
 
 ## Quickstart
 

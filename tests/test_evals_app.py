@@ -117,8 +117,8 @@ def _write_eval_profile_tree(
 def evals_enabled_client(client, tmp_path, monkeypatch):
     """Client with eval API enabled and an isolated profile tree."""
     c, app_module = client
-    from backend import config
-    from backend import profiles as profiles_module
+    from runnrr import config
+    from runnrr import profiles as profiles_module
 
     profile_id = "eval-api-test"
     profiles_root = tmp_path / "profiles"

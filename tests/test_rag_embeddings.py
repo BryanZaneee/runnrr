@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.rag.embeddings import (
+from runnrr.rag.embeddings import (
     EmbeddingProviderError,
     FakeEmbeddingProvider,
     get_embedding_provider,
@@ -35,7 +35,7 @@ def test_fake_embed_documents_matches_query_embedding() -> None:
 
 
 def test_provider_factory_uses_configured_fake_backend(monkeypatch) -> None:
-    from backend import config
+    from runnrr import config
 
     monkeypatch.setattr(config, "EMBEDDING_BACKEND", "fake")
     monkeypatch.setattr(config, "EMBEDDING_MODEL", "")
@@ -46,7 +46,7 @@ def test_provider_factory_uses_configured_fake_backend(monkeypatch) -> None:
 
 
 def test_provider_factory_rejects_unknown_backend(monkeypatch) -> None:
-    from backend import config
+    from runnrr import config
 
     monkeypatch.setattr(config, "EMBEDDING_BACKEND", "unknown")
 
@@ -55,7 +55,7 @@ def test_provider_factory_rejects_unknown_backend(monkeypatch) -> None:
 
 
 def test_voyage_provider_requires_api_key(monkeypatch) -> None:
-    from backend import config
+    from runnrr import config
 
     monkeypatch.setattr(config, "EMBEDDING_BACKEND", "voyage")
     monkeypatch.setattr(config, "EMBEDDING_MODEL", "voyage-3-large")

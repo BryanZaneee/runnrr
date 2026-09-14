@@ -1,7 +1,7 @@
 """Chunker tests. Deterministic IDs, header tracking, sliding-window overlap."""
 from __future__ import annotations
 
-from backend.rag.chunker import (
+from runnrr.rag.chunker import (
     DEFAULT_OVERLAP_TOKENS,
     DEFAULT_TARGET_TOKENS,
     chunk_markdown,

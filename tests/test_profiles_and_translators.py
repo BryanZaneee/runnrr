@@ -5,10 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.profiles import ProfileConfigError, build_kb_manifest, load_profile
-from backend.providers.gemini_provider import GeminiProvider
-from backend.providers.openai_compat_provider import OpenAICompatProvider
-from backend.tools import SCHEMAS, run_tool
+from runnrr.profiles import ProfileConfigError, build_kb_manifest, load_profile
+from runnrr.providers.gemini_provider import GeminiProvider
+from runnrr.providers.openai_compat_provider import OpenAICompatProvider
+from runnrr.tools import SCHEMAS, run_tool
 
 
 class DummyClient:
@@ -183,7 +183,7 @@ def test_missing_default_profile_raises(tmp_path):
 
 def test_profile_without_tools_key_gets_generic_defaults(tmp_path):
     """A minimal profile.json must NOT silently inherit personal-site tools."""
-    from backend.profiles import DEFAULT_PROFILE_TOOLS
+    from runnrr.profiles import DEFAULT_PROFILE_TOOLS
 
     profile_dir = tmp_path / "barebones"
     profile_dir.mkdir()
@@ -208,7 +208,7 @@ def test_profile_without_tools_key_gets_generic_defaults(tmp_path):
 
 
 def test_model_registry_entries_expose_typed_public_fields():
-    from backend.config import MODEL_REGISTRY, available_models
+    from runnrr.config import MODEL_REGISTRY, available_models
 
     cfg = MODEL_REGISTRY["claude-sonnet-4-5"]
     assert cfg["provider"] == "anthropic"

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.skills import (
+from runnrr.skills import (
     MAX_CATALOG_CHARS,
     SkillError,
     build_skill_catalog,
@@ -125,7 +125,7 @@ class TestReadSkillBody:
 
 class TestProfileIntegration:
     def test_profile_without_skills_is_unchanged(self):
-        from backend.profiles import load_profile
+        from runnrr.profiles import load_profile
 
         p = load_profile("personal-agent")
         assert "<skills>" not in p.system_prompt
@@ -133,7 +133,7 @@ class TestProfileIntegration:
     def test_catalog_lands_in_the_system_prompt(self, tmp_path, monkeypatch):
         import json
 
-        from backend import profiles as profiles_module
+        from runnrr import profiles as profiles_module
 
         pdir = tmp_path / "skilled"
         pdir.mkdir()
@@ -161,7 +161,7 @@ class TestProfileIntegration:
         """
         import json
 
-        from backend import profiles as profiles_module
+        from runnrr import profiles as profiles_module
 
         pdir = tmp_path / "growing"
         pdir.mkdir()
@@ -192,7 +192,7 @@ class TestCacheCoupling:
         """
         import inspect
 
-        from backend.tools import skills_tool
+        from runnrr.tools import skills_tool
 
         source = inspect.getsource(skills_tool)
         assert "system_prompt" not in source

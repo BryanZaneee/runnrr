@@ -5,16 +5,16 @@ import importlib.util
 
 import pytest
 
-from backend.rag.bm25_index import BM25Index
-from backend.rag.chunker import Chunk
-from backend.rag.manifest import (
+from runnrr.rag.bm25_index import BM25Index
+from runnrr.rag.chunker import Chunk
+from runnrr.rag.manifest import (
     FileEntry,
     Manifest,
     ManifestError,
     compute_diff,
     scan_markdown_files,
 )
-from backend.rag.vector_index import VectorIndex, VectorIndexDependencyError
+from runnrr.rag.vector_index import VectorIndex, VectorIndexDependencyError
 
 
 def _chunk(
@@ -187,7 +187,7 @@ def test_vector_index_reports_missing_optional_dependency() -> None:
         pytest.skip("sqlite-vec is installed; missing-dependency path unavailable")
     index = VectorIndex(":memory:", dim=2)
 
-    with pytest.raises(VectorIndexDependencyError, match="easyagent\\[rag\\]"):
+    with pytest.raises(VectorIndexDependencyError, match="runnrr\\[rag\\]"):
         index.search([1.0, 0.0])
 
 

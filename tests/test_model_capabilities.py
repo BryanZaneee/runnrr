@@ -11,8 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.config import MODEL_REGISTRY, MAX_TOKENS, max_tokens_for
-from backend.providers.registry import ProviderSetupError, build_provider
+from runnrr.config import MODEL_REGISTRY, MAX_TOKENS, max_tokens_for
+from runnrr.providers.registry import ProviderSetupError, build_provider
 
 CAPABILITY_FLAGS = (
     "supports_tools",
@@ -107,7 +107,7 @@ class TestGeminiCorrectness:
             _drain_gemini,
             _gemini_chunk,
         )
-        from backend.providers.gemini_provider import GeminiProvider
+        from runnrr.providers.gemini_provider import GeminiProvider
 
         chunk = _gemini_chunk(text="partial", finish_reason="MAX_TOKENS")
         provider = GeminiProvider(client=FakeGeminiClient([chunk]))
@@ -123,7 +123,7 @@ class TestGeminiCorrectness:
             _drain_gemini,
             _gemini_chunk,
         )
-        from backend.providers.gemini_provider import GeminiProvider
+        from runnrr.providers.gemini_provider import GeminiProvider
 
         chunk = _gemini_chunk(text="", finish_reason="SAFETY")
         provider = GeminiProvider(client=FakeGeminiClient([chunk]))
@@ -138,7 +138,7 @@ class TestGeminiCorrectness:
             _drain_gemini,
             _gemini_chunk,
         )
-        from backend.providers.gemini_provider import GeminiProvider
+        from runnrr.providers.gemini_provider import GeminiProvider
 
         chunk = _gemini_chunk(text="all done", finish_reason="STOP")
         provider = GeminiProvider(client=FakeGeminiClient([chunk]))
@@ -157,10 +157,10 @@ class TestToolResultParityAcrossProviders:
         for the very same tool — quietly invalidating any eval that compares
         models against each other.
         """
-        from backend.providers.anthropic_provider import AnthropicProvider
-        from backend.providers.gemini_provider import GeminiProvider
-        from backend.providers.openai_compat_provider import OpenAICompatProvider
-        from backend.tools.results import ToolResult
+        from runnrr.providers.anthropic_provider import AnthropicProvider
+        from runnrr.providers.gemini_provider import GeminiProvider
+        from runnrr.providers.openai_compat_provider import OpenAICompatProvider
+        from runnrr.tools.results import ToolResult
 
         payload = '{"hits": []}'
         result = ToolResult(tool_use_id="t1", name="search_kb", content=payload)
@@ -202,7 +202,7 @@ class TestToolUseStartParity:
             _drain,
             _tool_call,
         )
-        from backend.providers.openai_compat_provider import OpenAICompatProvider
+        from runnrr.providers.openai_compat_provider import OpenAICompatProvider
 
         client = FakeOpenAIClient([
             _chunk(choices=[_choice(delta=_delta(tool_calls=[

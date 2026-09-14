@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.providers.openai_compat_provider import OpenAICompatProvider, _norm_usage
+from runnrr.providers.openai_compat_provider import OpenAICompatProvider, _norm_usage
 
 
 # --------------------------------------------------------------------------- #
@@ -87,22 +87,22 @@ async def _drain(provider, messages, tools=None):
 class TestProviderTimeouts:
     def test_anthropic_client_gets_timeout(self, monkeypatch):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key")
-        from backend.config import PROVIDER_TIMEOUT_SECONDS
-        from backend.providers.anthropic_provider import AnthropicProvider
+        from runnrr.config import PROVIDER_TIMEOUT_SECONDS
+        from runnrr.providers.anthropic_provider import AnthropicProvider
 
         provider = AnthropicProvider()
         assert provider.client.timeout == PROVIDER_TIMEOUT_SECONDS
 
     def test_openai_compat_client_gets_timeout(self, monkeypatch):
         monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
-        from backend.config import PROVIDER_TIMEOUT_SECONDS
+        from runnrr.config import PROVIDER_TIMEOUT_SECONDS
 
         provider = OpenAICompatProvider(api_key_env="OPENAI_API_KEY")
         assert provider.client.timeout == PROVIDER_TIMEOUT_SECONDS
 
     def test_gemini_client_gets_timeout_in_milliseconds(self, monkeypatch):
-        import backend.providers.gemini_provider as gp
-        from backend.config import PROVIDER_TIMEOUT_SECONDS
+        import runnrr.providers.gemini_provider as gp
+        from runnrr.config import PROVIDER_TIMEOUT_SECONDS
 
         recorded: dict = {}
 
@@ -367,9 +367,9 @@ class TestDeepSeekModelSurface:
         # Pin DEFAULT_MODEL so the test doesn't depend on what's in local .env.
         monkeypatch.setenv("DEFAULT_MODEL", "deepseek-v4-flash")
 
-        from backend import config
+        from runnrr import config
         importlib.reload(config)
-        from backend import app as app_module
+        from runnrr import app as app_module
         importlib.reload(app_module)
         app_module.limiter.enabled = False
 
@@ -453,7 +453,7 @@ class TestGeminiStreaming:
     async def test_text_stream_yields_deltas_and_end_turn(self):
         from google.genai import types
 
-        from backend.providers.gemini_provider import GeminiProvider
+        from runnrr.providers.gemini_provider import GeminiProvider
 
         client = FakeGeminiClient([
             _gemini_chunk(text="Hello"),
@@ -476,7 +476,7 @@ class TestGeminiStreaming:
 
     @pytest.mark.asyncio
     async def test_function_call_turn_pairs_and_falls_back_to_synthetic_id(self):
-        from backend.providers.gemini_provider import GeminiProvider
+        from runnrr.providers.gemini_provider import GeminiProvider
 
         client = FakeGeminiClient([
             _gemini_chunk(parts=[
@@ -512,7 +512,7 @@ class TestGeminiStreaming:
 
     @pytest.mark.asyncio
     async def test_tool_use_start_emitted_per_call(self):
-        from backend.providers.gemini_provider import GeminiProvider
+        from runnrr.providers.gemini_provider import GeminiProvider
 
         client = FakeGeminiClient([
             _gemini_chunk(parts=[
@@ -536,8 +536,8 @@ class TestGeminiStreaming:
     async def test_append_tool_results_pairs_function_responses(self):
         from google.genai import types
 
-        from backend.providers.gemini_provider import GeminiProvider
-        from backend.tools.results import ToolResult
+        from runnrr.providers.gemini_provider import GeminiProvider
+        from runnrr.tools.results import ToolResult
 
         provider = GeminiProvider(client=FakeGeminiClient([]))
         messages = []
@@ -559,7 +559,7 @@ class TestGeminiStreaming:
 
     @pytest.mark.asyncio
     async def test_usage_maps_thinking_and_cache_fields(self):
-        from backend.providers.gemini_provider import GeminiProvider
+        from runnrr.providers.gemini_provider import GeminiProvider
 
         client = FakeGeminiClient([
             _gemini_chunk(
@@ -603,7 +603,7 @@ class TestUsageAlwaysEmitted:
 
     @pytest.mark.asyncio
     async def test_missing_usage_yields_estimated_event(self):
-        from backend.providers.openai_compat_provider import OpenAICompatProvider
+        from runnrr.providers.openai_compat_provider import OpenAICompatProvider
 
         client = FakeOpenAIClient([
             _chunk(choices=[_choice(delta=_delta(text="hello there"))]),
@@ -624,7 +624,7 @@ class TestUsageAlwaysEmitted:
 
     @pytest.mark.asyncio
     async def test_reported_usage_is_not_marked_estimated(self):
-        from backend.providers.openai_compat_provider import OpenAICompatProvider
+        from runnrr.providers.openai_compat_provider import OpenAICompatProvider
 
         client = FakeOpenAIClient([
             _chunk(choices=[_choice(delta=_delta(text="hi"))]),

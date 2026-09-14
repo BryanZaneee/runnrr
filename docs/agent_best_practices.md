@@ -14,7 +14,7 @@ This project treats each agent as a profile on top of a reusable engine. Keep th
 - Use higher-intelligence models for complex multi-step planning, deep codebase analysis, and evaluation.
 - Use faster/cheaper models for lightweight routing, dataset generation, and high-volume background tasks.
 - Prefer per-task routing over assuming one model is best for every workflow.
-- Keep routing server-owned. Clients should request EasyAgent, not a vendor SDK or raw provider model.
+- Keep routing server-owned. Clients should request Runnrr, not a vendor SDK or raw provider model.
 
 ## Prompting
 
@@ -40,7 +40,7 @@ This project treats each agent as a profile on top of a reusable engine. Keep th
 - Validate inputs at the tool boundary and return useful errors that the model can recover from.
 - Keep tools generic where possible so agents can compose them flexibly.
 - Profiles declare their allowed tools. The engine must not expose every tool to every profile by default.
-- Use bounded tool loops. EasyAgent uses `MAX_TOOL_HOPS` as a runaway-loop guard.
+- Use bounded tool loops. Runnrr uses `MAX_TOOL_HOPS` as a runaway-loop guard.
 - Send tool results back with the original `tool_use_id`, JSON content, and `is_error` status so providers can pair results with requests.
 - Keep preview tools honest. A preview tool may normalize data or generate a mock URL, but it must not imply a real write, payment, reminder, or external action occurred.
 - Prefer small composable tools, such as search, fetch, calculate, and lookup, over large single-purpose tools that hide the workflow from the model.

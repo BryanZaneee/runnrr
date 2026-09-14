@@ -1,6 +1,6 @@
 # BZS Software AI Workflow Pitch And Demo Runbook
 
-Use this as a call track for prospects who need AI to save time, reduce missed work, and improve operational efficiency. Customers should see **BZS Software**, not EasyAgent. EasyAgent is the internal reusable framework that proves BZS can build portable, grounded, tool-using AI workflows.
+Use this as a call track for prospects who need AI to save time, reduce missed work, and improve operational efficiency. Customers should see **BZS Software**, not Runnrr. Runnrr is the internal reusable framework that proves BZS can build portable, grounded, tool-using AI workflows.
 
 ## Core Pitch
 
@@ -16,8 +16,8 @@ The value is not "an AI chatbot." The value is a faster business process:
 
 Internal proof point:
 
-- EasyAgent is the reusable engine underneath the demo work. It supports scoped profiles, knowledge bases, tool allowlists, provider flexibility, server-side credentials, streaming chat, rate limits, budgets, status endpoints, and evals.
-- Do not lead with the EasyAgent name in customer copy. Use it as technical evidence when a buyer asks how BZS can deliver the workflow safely.
+- Runnrr is the reusable engine underneath the demo work. It supports scoped profiles, knowledge bases, tool allowlists, provider flexibility, server-side credentials, streaming chat, rate limits, budgets, status endpoints, and evals.
+- Do not lead with the Runnrr name in customer copy. Use it as technical evidence when a buyer asks how BZS can deliver the workflow safely.
 
 ## Business Pain Points To Lead With
 
@@ -58,14 +58,14 @@ Use the BZS website's public structure as the starting offer menu:
 Run the backend and dashboard locally:
 
 ```bash
-.venv/bin/python -m uvicorn backend.app:app --reload --port 8001
+.venv/bin/python -m uvicorn runnrr.app:app --reload --port 8001
 .venv/bin/python -m http.server 8000 --directory web
 ```
 
 Open `http://localhost:8000`, confirm the API base points at `http://127.0.0.1:8001`, then switch profiles in the dashboard/chat client. If the Customer Service semantic index is missing, either rebuild it for the cleanest RAG demo or use literal KB questions that work through `search_kb`.
 
 ```bash
-.venv/bin/python -m backend.rag.cli --backend fake build customer-service
+.venv/bin/python -m runnrr.rag.cli --backend fake build customer-service
 ```
 
 ## Demo 1: BZS Lead Workflow For Revenue Capture

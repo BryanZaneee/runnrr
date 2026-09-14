@@ -26,4 +26,7 @@ profiles/*/evals/runs/
 
 # Generated/one-off artifacts that land at the repo root.
 repomix-output.xml
-easyagent-walkthrough.html
+
+# Runtime state (workspace sandboxes, SQLite, settings).
+/workspace/
+/data/

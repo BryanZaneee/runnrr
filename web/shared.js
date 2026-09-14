@@ -1,4 +1,4 @@
-// Helpers shared by the three EasyAgent local pages: the technical dashboard
+// Helpers shared by the three Runnrr local pages: the technical dashboard
 // (app.js), the eval dashboard (evals/evals.js), and the Agent Builder
 // (builder/builder.js). Load this before the page script.
 //
@@ -7,7 +7,7 @@
 // pages deliberately share one API-base setting via API_BASE_KEY.
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
-const API_BASE_KEY = "easyagent-dashboard-api-base";
+const API_BASE_KEY = "runnrr-dashboard-api-base";
 
 function defaultApiBase() {
   return LOCAL_HOSTS.has(window.location.hostname) ? "http://127.0.0.1:8001" : "";

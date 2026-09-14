@@ -45,7 +45,7 @@ TEXT_HOP = [
 class TestChatCompleteFields:
     def test_emits_the_new_fields(self, client, monkeypatch, fake_provider_cls, caplog):
         c, app_module = client
-        with caplog.at_level(logging.INFO, logger="easyagent"):
+        with caplog.at_level(logging.INFO, logger="runnrr"):
             _run_turn(c, app_module, monkeypatch, fake_provider_cls, [TEXT_HOP])
 
         rec = _chat_complete(caplog)
@@ -63,7 +63,7 @@ class TestChatCompleteFields:
         # The old total was input + output, so thinking tokens were billed by the
         # vendor and free here.
         c, app_module = client
-        with caplog.at_level(logging.INFO, logger="easyagent"):
+        with caplog.at_level(logging.INFO, logger="runnrr"):
             _run_turn(c, app_module, monkeypatch, fake_provider_cls, [TEXT_HOP])
 
         rec = _chat_complete(caplog)
@@ -75,7 +75,7 @@ class TestChatCompleteFields:
     ):
         # They are subsets of input_tokens; adding them would double-count.
         c, app_module = client
-        with caplog.at_level(logging.INFO, logger="easyagent"):
+        with caplog.at_level(logging.INFO, logger="runnrr"):
             _run_turn(c, app_module, monkeypatch, fake_provider_cls, [TEXT_HOP])
 
         rec = _chat_complete(caplog)
@@ -87,7 +87,7 @@ class TestChatCompleteFields:
         self, client, monkeypatch, fake_provider_cls, caplog
     ):
         c, app_module = client
-        with caplog.at_level(logging.INFO, logger="easyagent"):
+        with caplog.at_level(logging.INFO, logger="runnrr"):
             _run_turn(c, app_module, monkeypatch, fake_provider_cls, [TEXT_HOP])
 
         rec = _chat_complete(caplog)
@@ -99,7 +99,7 @@ class TestChatCompleteFields:
         # claude-sonnet-4-5 has no pricing entry yet. It must log null, never 0.0 —
         # a zero would read as a free turn.
         c, app_module = client
-        with caplog.at_level(logging.INFO, logger="easyagent"):
+        with caplog.at_level(logging.INFO, logger="runnrr"):
             _run_turn(c, app_module, monkeypatch, fake_provider_cls, [TEXT_HOP])
 
         assert _chat_complete(caplog).cost_usd is None
@@ -124,7 +124,7 @@ class TestHopAndToolCounting:
             {"type": "usage", "usage": {"input_tokens": 10, "output_tokens": 2}},
             {"type": "message_done", "stop_reason": "tool_use"},
         ]
-        with caplog.at_level(logging.INFO, logger="easyagent"):
+        with caplog.at_level(logging.INFO, logger="runnrr"):
             _run_turn(
                 c, app_module, monkeypatch, fake_provider_cls, [tool_hop, TEXT_HOP]
             )
@@ -138,7 +138,7 @@ class TestHopAndToolCounting:
     ):
         # chat_complete has an out-of-repo consumer; fields are added, not renamed.
         c, app_module = client
-        with caplog.at_level(logging.INFO, logger="easyagent"):
+        with caplog.at_level(logging.INFO, logger="runnrr"):
             _run_turn(c, app_module, monkeypatch, fake_provider_cls, [TEXT_HOP])
         assert hasattr(_chat_complete(caplog), "tool_hops")
 

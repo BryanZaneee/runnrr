@@ -1,6 +1,6 @@
 """Token-accounting invariants.
 
-These lock down the contract in backend/usage.py. Before it existed, the same
+These lock down the contract in runnrr/usage.py. Before it existed, the same
 turn produced different totals depending on which consumer counted it, and
 `cache_read` meant three different things depending on the provider.
 """
@@ -10,12 +10,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.config import MODEL_REGISTRY
-from backend.pricing import PRICING, cost_usd
-from backend.providers.anthropic_provider import _norm_usage as anthropic_usage
-from backend.providers.gemini_provider import _norm_usage as gemini_usage
-from backend.providers.openai_compat_provider import _norm_usage as openai_usage
-from backend.usage import billable_total, tally, zero_tokens
+from runnrr.config import MODEL_REGISTRY
+from runnrr.pricing import PRICING, cost_usd
+from runnrr.providers.anthropic_provider import _norm_usage as anthropic_usage
+from runnrr.providers.gemini_provider import _norm_usage as gemini_usage
+from runnrr.providers.openai_compat_provider import _norm_usage as openai_usage
+from runnrr.usage import billable_total, tally, zero_tokens
 
 
 class TestCacheSemantics:

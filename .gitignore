@@ -28,5 +28,5 @@ profiles/*/evals/runs/
 repomix-output.xml
 
 # Runtime state (workspace sandboxes, SQLite, settings).
-workspace/
-data/
+/workspace/
+/data/

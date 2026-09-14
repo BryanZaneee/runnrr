@@ -21,7 +21,7 @@ Order:
 10. `group-management` — Supabase `orgs/memberships/roles` + invites; a role claim check in `require_user`.
 11. `serve-ui-from-runtime` — plan P4 (`app.mount("/", StaticFiles(...))`).
 12. `mac-packaging` — installer / menubar wrapper around `runnrr up`.
-13. `cloud-provisioning` — one container per customer on the VPS; the frozen EasyAgent `Caddyfile` (tag `v0.1.0-easyagent-final`) has the Sidekick per-user container blocks as prior art.
+13. `cloud-provisioning` — one container per customer on the VPS; the frozen `Caddyfile` (tag `v0.1.0-easyagent-final`) has the Sidekick per-user container blocks as prior art.
 14. `model-config-file` — `models.json` replacing `MODEL_REGISTRY` + pricing; add per-model minimum cacheable tokens and DeepSeek peak/off-peak rates.
 15. `docker-sandbox` — swap `workspace._spawn()` for `docker run --rm -v ws:/work --network none`; bwrap/Seatbelt as the lighter option.
 

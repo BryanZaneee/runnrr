@@ -9,5 +9,5 @@ Deploys are manual:
 ssh <host> 'cd /opt/runnrr && git pull --ff-only && .venv/bin/uv pip install -e ".[rag]" && systemctl restart runnrr'
 ```
 
-The old bryanzane.com EasyAgent deploy is frozen at tag `v0.1.0-easyagent-final`
+The old bryanzane.com deploy is frozen at tag `v0.1.0-easyagent-final`
 under `/opt/easyagent` and is no longer touched by this repository.

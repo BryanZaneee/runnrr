@@ -1,17 +1,17 @@
 # Runnrr
 
-Runnrr (formerly EasyAgent) is a self-hosted business-task agent runtime: one runtime per
+Runnrr is a self-hosted business-task agent runtime: one runtime per
 business, running continuously on the owner's Mac or in a per-customer cloud container,
 reached through a web UI with a Supabase login. Each agent works inside its own sandbox
 workspace (files + shell), reads a curated knowledge base, and runs on whichever model
-provider is cheapest for the job (DeepSeek V4 Flash by default; Claude, OpenAI, and Kimi
-are one profile setting away). Keys stay server-side; clients talk to the FastAPI runtime
-over SSE and never see provider credentials.
+provider is cheapest for the job (DeepSeek V4 Flash by default; Claude, OpenAI, Gemini,
+and Kimi are one profile setting away). Keys stay server-side; clients talk to the FastAPI
+runtime over SSE and never see provider credentials.
 
 The engine is provider-agnostic and business-agnostic: profiles, knowledge bases,
 providers, and tools are separated so the same loop can power an invoice clerk, a
 customer-support bot, a sales assistant, or an internal-ops agent. The overhaul that turns
-the former EasyAgent engine into this product is tracked in
+the original engine into this product is tracked in
 [`docs/plans/runnrr-analysis.md`](./docs/plans/runnrr-analysis.md); deferred features live
 in [`docs/roadmap/`](./docs/roadmap/).
 
@@ -164,4 +164,8 @@ template. Run the tests with `.venv/bin/python -m pytest -q`. Never commit `.env
 
 ## License
 
-MIT
+[MIT](./LICENSE).
+
+## History
+
+Previously published as EasyAgent.

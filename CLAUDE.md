@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Runnrr (formerly EasyAgent, formerly Strauss) is a self-hosted business-task agent runtime: **one runtime per business**, running continuously on the owner's Mac or in a per-customer cloud container, reached through a web UI with a Supabase login. Each agent profile gets a sandbox workspace (files + shell), a curated read-only KB, and a per-profile model choice with a cheap default. Cost effectiveness (prompt-prefix caching, cheap models) and usability for non-technical people gate every design choice.
+Runnrr is a self-hosted business-task agent runtime: **one runtime per business**, running continuously on the owner's Mac or in a per-customer cloud container, reached through a web UI with a Supabase login. Each agent profile gets a sandbox workspace (files + shell), a curated read-only KB, and a per-profile model choice with a cheap default. Cost effectiveness (prompt-prefix caching, cheap models) and usability for non-technical people gate every design choice.
 
 The overhaul is sequenced in [`docs/plans/runnrr-analysis.md`](docs/plans/runnrr-analysis.md) (§5). The bryanzane.com deploy is frozen at tag `v0.1.0-easyagent-final` and no longer served from this repo. Deferred features are in [`docs/roadmap/`](docs/roadmap/); the original phase plan and the Hermes feature inventory are in `docs/plans/`. Deployment files live in `deploy/`.
 
@@ -165,5 +165,5 @@ The agent loop normalizes provider events to: `text_delta`, `thinking_delta`, `t
 
 - Deploys are **manual** (`deploy/README.md`): `git pull --ff-only && systemctl restart runnrr` on the host. Nothing auto-deploys on push.
 - `deploy/runnrr.service` is the systemd unit (single uvicorn worker on `127.0.0.1:8001`).
-- The old bryanzane.com EasyAgent deploy stays pinned at tag `v0.1.0-easyagent-final` under `/opt/easyagent` on the VPS (`ssh root@100.88.216.70`) and must be removed from `/opt/deploy/deploy.sh`'s `REPO_MAP` so a stray dispatch cannot pull Runnrr onto the site.
+- The old bryanzane.com deploy stays pinned at tag `v0.1.0-easyagent-final` under `/opt/easyagent` on the VPS (`ssh root@100.88.216.70`) and must be removed from `/opt/deploy/deploy.sh`'s `REPO_MAP` so a stray dispatch cannot pull Runnrr onto the site.
 - `kb/` is gitignored; KB content and RAG indexes (`python -m runnrr.rag.cli build <profile>`) are synced by hand when a profile uses `semantic_search_kb`.

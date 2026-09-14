@@ -1,7 +1,7 @@
 > **Single-tenant note (2026-09-06).** Runnrr is one runtime per business. Ignore every
 > `tenant_id` and PR #2 reference below: sessions and audit rows carry `user_id` (an
 > employee of the business) instead. `X-Admin-Token` / `ADMIN_TOKEN` are replaced by
-> Supabase `require_user` (see `supabase-auth.md`). `EASYAGENT_*` env names are `RUNNRR_*`,
+> Supabase `require_user` (see `supabase-auth.md`). Env names use the `RUNNRR_*` prefix and
 > `backend/` is `runnrr/`. Where this design and `docs/plans/runnrr-analysis.md` disagree,
 > the analysis wins; the divergence is called out at the top of the file where it matters.
 
@@ -18,7 +18,7 @@
 ## Design
 
 - One small store behind the existing dict, same shape as `SessionDict` (`messages`, `last_seen`, `provider`, `profile`) plus `profile_id` and nullable `tenant_id`.
-- **SQLite via stdlib `sqlite3`**, single file at `EASYAGENT_SESSION_DB` (default `data/sessions.sqlite3`; `:memory:` keeps today's behavior for tests). No ORM, no new dependency. Postgres later is a config swap only if #2 lands on Postgres.
+- **SQLite via stdlib `sqlite3`**, single file at `RUNNRR_SESSION_DB` (default `data/sessions.sqlite3`; `:memory:` keeps today's behavior for tests). No ORM, no new dependency. Postgres later is a config swap only if #2 lands on Postgres.
 - Write-through: `chat()` loads the row on first touch, keeps the in-memory dict as a per-process cache, and appends the new turns after `run_conversation_stream` finishes. Messages are stored **append-only** (one row per message, ordered) so the persisted transcript is exactly the prefix the provider cache saw — never rewritten.
 - TTL sweep moves from the dict to a `DELETE WHERE last_seen < ?` on the same cadence. `MAX_ACTIVE_SESSIONS` counts live rows.
 - Profile/model switch still resets `messages` (existing contract); the reset is an appended `reset` marker row, not a delete, so audit (feat/audit-log-kill-switch) keeps the old turns.

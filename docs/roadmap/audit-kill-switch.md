@@ -1,7 +1,7 @@
 > **Single-tenant note (2026-09-06).** Runnrr is one runtime per business. Ignore every
 > `tenant_id` and PR #2 reference below: sessions and audit rows carry `user_id` (an
 > employee of the business) instead. `X-Admin-Token` / `ADMIN_TOKEN` are replaced by
-> Supabase `require_user` (see `supabase-auth.md`). `EASYAGENT_*` env names are `RUNNRR_*`,
+> Supabase `require_user` (see `supabase-auth.md`). Env names use the `RUNNRR_*` prefix and
 > `backend/` is `runnrr/`. Where this design and `docs/plans/runnrr-analysis.md` disagree,
 > the analysis wins; the divergence is called out at the top of the file where it matters.
 
@@ -17,7 +17,7 @@ Runnrr sells "AI drafts, people send" to businesses that will ask two questions 
 
 ## Design
 
-**Audit log.** One append-only JSONL stream (`EASYAGENT_AUDIT_LOG`, default `data/audit.jsonl`; or the durable-sessions SQLite file if that branch lands first) with one record per event: `user_message`, `tool_call` (name + arguments), `tool_result` (truncated output + `is_error`), `assistant_message`, `disabled_rejection`. Every record carries `ts`, `session_id`, `profile_id`, `tenant_id`, `turn_id`, `model_id`. Emitted from the existing `_instrument()` wrapper by watching the normalized event stream — no changes inside the loop or providers.
+**Audit log.** One append-only JSONL stream (`RUNNRR_AUDIT_LOG`, default `data/audit.jsonl`; or the durable-sessions SQLite file if that branch lands first) with one record per event: `user_message`, `tool_call` (name + arguments), `tool_result` (truncated output + `is_error`), `assistant_message`, `disabled_rejection`. Every record carries `ts`, `session_id`, `profile_id`, `tenant_id`, `turn_id`, `model_id`. Emitted from the existing `_instrument()` wrapper by watching the normalized event stream — no changes inside the loop or providers.
 
 **No secrets in plaintext (cheap version).** Before writing, run the record through a regex scrub for obvious keys (`sk-…`, `AIza…`, `xoxb-…`, bearer tokens, `TWILIO_AUTH_TOKEN`-shaped strings) and replace with `[REDACTED]`. Full DLP lives in feat/dlp-redact and will reuse this hook.
 

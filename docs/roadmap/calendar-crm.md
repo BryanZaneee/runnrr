@@ -1,7 +1,7 @@
 > **Single-tenant note (2026-09-06).** Runnrr is one runtime per business. Ignore every
 > `tenant_id` and PR #2 reference below: sessions and audit rows carry `user_id` (an
 > employee of the business) instead. `X-Admin-Token` / `ADMIN_TOKEN` are replaced by
-> Supabase `require_user` (see `supabase-auth.md`). `EASYAGENT_*` env names are `RUNNRR_*`,
+> Supabase `require_user` (see `supabase-auth.md`). Env names use the `RUNNRR_*` prefix and
 > `backend/` is `runnrr/`. Where this design and `docs/plans/runnrr-analysis.md` disagree,
 > the analysis wins; the divergence is called out at the top of the file where it matters.
 
@@ -17,7 +17,7 @@ The sales tools are previews on purpose (`lead_capture_preview` returns what *wo
 
 - Two new `ToolDef`s in `backend/tools/adapters/`: `book_appointment` and `crm_note`. Both `requires_approval=True` by default (feat/hitl-actions) — the model proposes, a person approves, then the adapter writes. Previews stay as they are; nothing existing is replaced or renamed.
 - **Allowlisted args.** Schemas are narrow: `book_appointment(start_iso, duration_min ∈ {15,30,60}, attendee_name, attendee_phone, summary ≤ 120 chars)`; `crm_note(contact_phone, text ≤ 500 chars)`. No free-form `fields` dict, no arbitrary calendar id — the calendar/pipeline is fixed per tenant in config, not chosen by the model.
-- **Per-tenant OAuth.** Tokens live in the tenant store (PR #2) keyed by `tenant_id`; until #2 lands, `EASYAGENT_TENANT_SECRETS_DIR` holds one JSON per tenant (git-ignored). Adapter handlers receive `tenant_id` through `ToolContext`; a missing token returns a `ToolResult(is_error=True)` telling the model to ask the business to connect the account — never a traceback.
+- **Per-tenant OAuth.** Tokens live in the tenant store (PR #2) keyed by `tenant_id`; until #2 lands, `RUNNRR_TENANT_SECRETS_DIR` holds one JSON per tenant (git-ignored). Adapter handlers receive `tenant_id` through `ToolContext`; a missing token returns a `ToolResult(is_error=True)` telling the model to ask the business to connect the account — never a traceback.
 - First backends: Google Calendar (REST via stdlib `urllib` + the OAuth refresh dance, ~60 lines) and a generic "CRM = webhook" note poster (`POST` JSON to a per-tenant URL with a shared secret) so HubSpot/Pipedrive/etc. can be added without touching the engine. No vendor SDKs.
 - Idempotency: `book_appointment` sends the approval id as the event's `iCalUID` so approving twice cannot double-book.
 

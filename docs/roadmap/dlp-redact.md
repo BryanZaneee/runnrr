@@ -1,7 +1,7 @@
 > **Single-tenant note (2026-09-06).** Runnrr is one runtime per business. Ignore every
 > `tenant_id` and PR #2 reference below: sessions and audit rows carry `user_id` (an
 > employee of the business) instead. `X-Admin-Token` / `ADMIN_TOKEN` are replaced by
-> Supabase `require_user` (see `supabase-auth.md`). `EASYAGENT_*` env names are `RUNNRR_*`,
+> Supabase `require_user` (see `supabase-auth.md`). Env names use the `RUNNRR_*` prefix and
 > `backend/` is `runnrr/`. Where this design and `docs/plans/runnrr-analysis.md` disagree,
 > the analysis wins; the divergence is called out at the top of the file where it matters.
 

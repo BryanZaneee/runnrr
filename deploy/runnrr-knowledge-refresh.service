@@ -1,0 +1,20 @@
+[Unit]
+Description=Refresh public portfolio website and GitHub knowledge
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=runnrr
+Group=runnrr
+WorkingDirectory=/opt/runnrr-workstation
+EnvironmentFile=/opt/easyagent/.env
+EnvironmentFile=/opt/runnrr-workstation/demo.env
+Environment=RUNNRR_KB_ROOT=/opt/runnrr-workstation/kb
+Environment=RUNNRR_PROFILE_ROOT=/opt/runnrr-workstation/profiles
+Environment=RUNNRR_PROJECT_DB=/opt/runnrr-workstation/data/projects.sqlite3
+ExecStart=/opt/runnrr-workstation/.venv/bin/python -m runnrr.github_sync personal-agent
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/runnrr-workstation/data /opt/runnrr-workstation/kb /opt/runnrr-workstation/profiles

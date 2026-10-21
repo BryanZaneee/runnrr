@@ -4,6 +4,7 @@ This module keeps the dashboard aggregation shape out of `runnrr.app`. The
 individual `/api/health`, `/api/budget`, `/api/models`, and `/api/rag/index`
 endpoints remain the stable public reads.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -20,9 +21,7 @@ def runtime_status_payload(
 ) -> dict[str, Any]:
     """Return the dev-dashboard aggregate runtime snapshot."""
     available = [
-        model
-        for model in config.available_models()
-        if model["provider"] in registered_providers
+        model for model in config.available_models() if model["provider"] in registered_providers
     ]
     return {
         "health": {"status": "ok", "sessions": sessions},

@@ -1,4 +1,5 @@
 """Chunker tests. Deterministic IDs, header tracking, sliding-window overlap."""
+
 from __future__ import annotations
 
 from runnrr.rag.chunker import (

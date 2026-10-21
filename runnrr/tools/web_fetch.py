@@ -1,10 +1,12 @@
 """SSRF-guarded public web page fetch tool."""
+
 from __future__ import annotations
 
 import html
 import ipaddress
 import re
 import socket
+from contextlib import contextmanager
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -21,7 +23,7 @@ FETCH_MAX_BYTES = 250_000
 FETCH_MAX_REDIRECTS = 3
 
 
-def _assert_public_http_url(url: str) -> str:
+def _public_target(url: str) -> tuple[str, str]:
     """Validate a URL before fetching so tools cannot reach local infrastructure."""
     parsed = urlparse(str(url or "").strip())
     if parsed.scheme not in ("http", "https"):
@@ -55,20 +57,19 @@ def _assert_public_http_url(url: str) -> str:
         if not ip.is_global:
             raise ToolExecutionError("private, local, or reserved network hosts are not allowed")
 
-    return parsed.geturl()
+    if parsed.username or parsed.password:
+        raise ToolExecutionError("URL credentials are not allowed")
+    return parsed.geturl(), sorted(addresses)[0]
 
 
 def _text_content_type(content_type: str) -> bool:
     ctype = (content_type or "").split(";", 1)[0].strip().lower()
-    return (
-        ctype.startswith("text/")
-        or ctype in {
-            "application/json",
-            "application/ld+json",
-            "application/xml",
-            "application/xhtml+xml",
-        }
-    )
+    return ctype.startswith("text/") or ctype in {
+        "application/json",
+        "application/ld+json",
+        "application/xml",
+        "application/xhtml+xml",
+    }
 
 
 def _html_title(raw: str) -> str:
@@ -90,6 +91,14 @@ def _html_to_text(raw: str) -> str:
     return text.strip()
 
 
+@contextmanager
+def _stream_public(*args, **kwargs):
+    # Client.stream supports TLS SNI extensions; the top-level stream helper doesn't.
+    with httpx.Client(trust_env=False) as client:
+        with client.stream(*args, **kwargs) as response:
+            yield response
+
+
 def fetch_url_text(url: str, *, max_chars: int = FETCH_DEFAULT_CHARS) -> dict[str, Any]:
     """Fetch one public text page and return a compact excerpt."""
     if not isinstance(url, str) or not url.strip():
@@ -101,40 +110,54 @@ def fetch_url_text(url: str, *, max_chars: int = FETCH_DEFAULT_CHARS) -> dict[st
     max_chars = max(1, min(max_chars, FETCH_MAX_CHARS))
 
     current_url = url.strip()
-    response: httpx.Response | None = None
     for _ in range(FETCH_MAX_REDIRECTS + 1):
-        current_url = _assert_public_http_url(current_url)
+        current_url, address = _public_target(current_url)
+        original = httpx.URL(current_url)
+        target = original.copy_with(host=address)
         try:
-            response = httpx.get(
-                current_url,
+            with _stream_public(
+                "GET",
+                target,
+                extensions={"sni_hostname": original.host},
                 follow_redirects=False,
                 timeout=FETCH_TIMEOUT_SECONDS,
-                headers={"User-Agent": "Runnrr research fetch/0.1"},
-            )
+                headers={
+                    "User-Agent": "Runnrr research fetch/0.1",
+                    "Host": original.netloc.decode(),
+                    "Accept-Encoding": "identity",
+                },
+            ) as response:
+                if response.status_code in {301, 302, 303, 307, 308}:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise ToolExecutionError(
+                            "redirect response did not include a Location header"
+                        )
+                    current_url = urljoin(current_url, location)
+                    continue
+                if response.status_code >= 400:
+                    raise ToolExecutionError(f"HTTP {response.status_code} while fetching URL")
+
+                content_type = response.headers.get("content-type", "")
+                if not _text_content_type(content_type):
+                    raise ToolExecutionError(f"non-text content type: {content_type or 'unknown'}")
+                # Refuse compressed bodies so a decompression bomb cannot bypass the cap.
+                if response.headers.get("content-encoding", "identity").lower() != "identity":
+                    raise ToolExecutionError("compressed responses are not supported")
+                body = bytearray()
+                for chunk in response.iter_bytes():
+                    if len(body) + len(chunk) > FETCH_MAX_BYTES:
+                        raise ToolExecutionError("response too large")
+                    body.extend(chunk)
+                raw = body.decode(response.encoding or "utf-8", errors="replace")
+                response_url = current_url
+                status_code = response.status_code
         except httpx.HTTPError as e:
             raise ToolExecutionError(f"network error: {type(e).__name__}: {e}") from e
-
-        if response.status_code in {301, 302, 303, 307, 308}:
-            location = response.headers.get("location")
-            if not location:
-                raise ToolExecutionError("redirect response did not include a Location header")
-            current_url = urljoin(current_url, location)
-            continue
         break
     else:
         raise ToolExecutionError("too many redirects")
 
-    assert response is not None
-    if response.status_code >= 400:
-        raise ToolExecutionError(f"HTTP {response.status_code} while fetching URL")
-
-    content_type = response.headers.get("content-type", "")
-    if not _text_content_type(content_type):
-        raise ToolExecutionError(f"non-text content type: {content_type or 'unknown'}")
-    if len(response.content) > FETCH_MAX_BYTES:
-        raise ToolExecutionError(f"response too large: {len(response.content)} bytes")
-
-    raw = response.text
     title = _html_title(raw) if "html" in content_type.lower() else ""
     readable = _html_to_text(raw) if "html" in content_type.lower() else raw.strip()
     readable = re.sub(r"\s+", " ", readable).strip()
@@ -143,8 +166,8 @@ def fetch_url_text(url: str, *, max_chars: int = FETCH_DEFAULT_CHARS) -> dict[st
         excerpt = excerpt.rstrip() + "..."
 
     return {
-        "url": str(response.url),
-        "status_code": response.status_code,
+        "url": response_url,
+        "status_code": status_code,
         "content_type": content_type.split(";", 1)[0].strip().lower(),
         "title": title,
         "excerpt": excerpt,

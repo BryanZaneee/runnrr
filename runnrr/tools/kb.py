@@ -1,4 +1,5 @@
 """Knowledge-base native tool definitions."""
+
 from __future__ import annotations
 
 from runnrr.kb_loader import (

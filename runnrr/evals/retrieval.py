@@ -1,4 +1,5 @@
 """Retrieval evaluation: per-variant retrieval and deterministic retrieval records."""
+
 from __future__ import annotations
 
 import time
@@ -114,12 +115,8 @@ def retrieval_record(
             rerank_fn=rerank_fn,
         )
         latency_ms = (time.perf_counter() - t0) * 1000.0
-        recall = grade_recall_at_k(
-            paths, list(case.expected_chunk_paths), k=k
-        ).score
-        precision = grade_context_precision(
-            paths, list(case.expected_chunk_paths), k=k
-        ).score
+        recall = grade_recall_at_k(paths, list(case.expected_chunk_paths), k=k).score
+        precision = grade_context_precision(paths, list(case.expected_chunk_paths), k=k).score
         rr = reciprocal_rank(paths, list(case.expected_chunk_paths))
         metrics = {
             "recall_at_k": recall,

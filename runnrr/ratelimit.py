@@ -4,6 +4,7 @@ Lives in its own module because both app.py and builder.py need the instance
 at import time, and app.py imports builder — importing it from app.py would be
 circular.
 """
+
 from __future__ import annotations
 
 from slowapi import Limiter

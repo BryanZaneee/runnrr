@@ -4,6 +4,7 @@ Tracks (sha256, mtime, chunk_count) per file so the Indexer only re-embeds
 files that actually changed. Lives at profiles/<id>/.index/manifest.json
 alongside the sqlite-vec DB and the BM25 pickle.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -47,9 +48,7 @@ class Manifest:
             "embedding_dim": self.embedding_dim,
             "files": {rel: asdict(entry) for rel, entry in self.files.items()},
         }
-        path.write_text(
-            json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
-        )
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
     @classmethod
     def load(cls, path: Path) -> "Manifest | None":
@@ -58,24 +57,19 @@ class Manifest:
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            raise ManifestError(
-                f"invalid manifest JSON at {path}: {exc.msg}"
-            ) from exc
+            raise ManifestError(f"invalid manifest JSON at {path}: {exc.msg}") from exc
         except OSError as exc:
             raise ManifestError(f"could not read manifest at {path}: {exc}") from exc
         if not isinstance(payload, dict):
             raise ManifestError(f"manifest at {path} must be a JSON object")
         version = payload.get("version", MANIFEST_VERSION)
         if version != MANIFEST_VERSION:
-            raise ManifestError(
-                f"unsupported manifest version {version!r} at {path}"
-            )
+            raise ManifestError(f"unsupported manifest version {version!r} at {path}")
         files_payload = payload.get("files", {})
         if not isinstance(files_payload, dict):
             raise ManifestError(f"manifest files at {path} must be an object")
         files = {
-            rel: _file_entry_from_payload(path, rel, entry)
-            for rel, entry in files_payload.items()
+            rel: _file_entry_from_payload(path, rel, entry) for rel, entry in files_payload.items()
         }
         return cls(
             version=version,
@@ -97,14 +91,10 @@ def _file_entry_from_payload(path: Path, rel: str, entry: object) -> FileEntry:
         raise ManifestError(f"manifest entry for {rel!r} at {path} must be an object")
     missing = {"sha256", "mtime", "chunk_count"} - set(entry)
     if missing:
-        raise ManifestError(
-            f"manifest entry for {rel!r} at {path} is missing {sorted(missing)}"
-        )
+        raise ManifestError(f"manifest entry for {rel!r} at {path} is missing {sorted(missing)}")
     sha256 = entry["sha256"]
     if not isinstance(sha256, str) or not sha256:
-        raise ManifestError(
-            f"manifest entry for {rel!r} at {path} has invalid sha256"
-        )
+        raise ManifestError(f"manifest entry for {rel!r} at {path} has invalid sha256")
     try:
         mtime = float(entry["mtime"])
         chunk_count = int(entry["chunk_count"])

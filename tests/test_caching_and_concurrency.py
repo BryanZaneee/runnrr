@@ -6,6 +6,7 @@ write instead of a read. Nothing about that failure is loud — it shows up only
 as a latency and cost curve that climbs with conversation length. These tests
 are what stop a future edit from silently reintroducing it.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -15,7 +16,6 @@ import pytest
 
 from runnrr.agent import run_conversation_stream
 from runnrr.profiles import load_profile
-
 
 # --------------------------------------------------------------------------- #
 # Cache prefix
@@ -45,9 +45,7 @@ class TestCacheBreakpoints:
 
         provider = AnthropicProvider.__new__(AnthropicProvider)
         profile = load_profile("personal-agent")
-        total = sum(
-            1 for s in provider.tools_for_provider(profile) if "cache_control" in s
-        ) + sum(
+        total = sum(1 for s in provider.tools_for_provider(profile) if "cache_control" in s) + sum(
             1 for b in provider.system_for_provider(profile) if "cache_control" in b
         )
         assert total <= 4, "Anthropic allows at most 4 cache breakpoints per request"
@@ -191,9 +189,15 @@ async def test_tools_in_one_hop_run_concurrently(monkeypatch):
 
     hops = [
         [
-            {"type": "tool_use_complete", "tool_use_id": f"t{i}", "name": "list_kb", "arguments": {}}
+            {
+                "type": "tool_use_complete",
+                "tool_use_id": f"t{i}",
+                "name": "list_kb",
+                "arguments": {},
+            }
             for i in range(3)
-        ] + [{"type": "message_done", "stop_reason": "tool_use"}],
+        ]
+        + [{"type": "message_done", "stop_reason": "tool_use"}],
         [
             {"type": "text_delta", "text": "done"},
             {"type": "message_done", "stop_reason": "end_turn"},
@@ -277,9 +281,15 @@ async def test_parallel_tools_preserve_call_order(monkeypatch):
 
     hops = [
         [
-            {"type": "tool_use_complete", "tool_use_id": f"t{i}", "name": "list_kb", "arguments": {}}
+            {
+                "type": "tool_use_complete",
+                "tool_use_id": f"t{i}",
+                "name": "list_kb",
+                "arguments": {},
+            }
             for i in range(3)
-        ] + [{"type": "message_done", "stop_reason": "tool_use"}],
+        ]
+        + [{"type": "message_done", "stop_reason": "tool_use"}],
         [
             {"type": "text_delta", "text": "done"},
             {"type": "message_done", "stop_reason": "end_turn"},
@@ -335,9 +345,7 @@ async def test_disconnect_midyield_leaves_a_valid_message_log(monkeypatch):
     provider = SlowToolProvider(hops)
     session = {"messages": [], "last_seen": 0.0, "provider": "x", "profile": "p"}
 
-    gen = run_conversation_stream(
-        "hi", session, provider, "m", load_profile("personal-agent")
-    )
+    gen = run_conversation_stream("hi", session, provider, "m", load_profile("personal-agent"))
     # Consume up to and including the first tool_result, then abandon the stream.
     async for ev in gen:
         if ev.get("event") == "tool_result":

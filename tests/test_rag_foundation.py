@@ -1,4 +1,5 @@
 """Focused tests for the model-free RAG foundation."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -182,6 +183,21 @@ def test_vector_index_module_import_does_not_require_sqlite_vec() -> None:
     assert index.dim == 2
 
 
+def test_vector_index_can_be_reused_across_tool_workers(tmp_path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    pytest.importorskip("sqlite_vec")
+    index = VectorIndex(tmp_path / "index.sqlite", dim=2)
+    alpha = _chunk("alpha", "alpha.md", "alpha retrieval")
+    try:
+        index.add(alpha, [1.0, 0.0])
+        with ThreadPoolExecutor(max_workers=4) as workers:
+            results = list(workers.map(lambda _: index.search([1.0, 0.0], k=1), range(12)))
+        assert all(result[0][0] == alpha for result in results)
+    finally:
+        index.close()
+
+
 def test_vector_index_reports_missing_optional_dependency() -> None:
     if importlib.util.find_spec("sqlite_vec") is not None:
         pytest.skip("sqlite-vec is installed; missing-dependency path unavailable")
@@ -202,12 +218,15 @@ def test_vector_index_roundtrip_upsert_and_delete(tmp_path) -> None:
     beta = _chunk("beta", "projects/beta.md", "beta customer support")
     index = VectorIndex(tmp_path / "index.sqlite", dim=3)
     try:
-        assert index.add_documents(
-            [
-                (alpha, [1.0, 0.0, 0.0]),
-                (beta, [0.0, 1.0, 0.0]),
-            ]
-        ) == 2
+        assert (
+            index.add_documents(
+                [
+                    (alpha, [1.0, 0.0, 0.0]),
+                    (beta, [0.0, 1.0, 0.0]),
+                ]
+            )
+            == 2
+        )
         assert len(index) == 2
         results = index.search([1.0, 0.0, 0.0], k=1)
         assert results[0][0] == alpha

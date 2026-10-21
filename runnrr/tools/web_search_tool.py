@@ -1,4 +1,5 @@
 """Public web-search native tool definition."""
+
 from __future__ import annotations
 
 from runnrr.tools.definitions import ToolDef

@@ -5,13 +5,14 @@ than disappear. Silent degradation is the worst failure mode for
 interoperability, because the symptom shows up as "the model is worse" rather
 than "the adapter dropped the field".
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 import pytest
 
-from runnrr.config import MODEL_REGISTRY, MAX_TOKENS, max_tokens_for
+from runnrr.config import MAX_TOKENS, MODEL_REGISTRY, max_tokens_for
 from runnrr.providers.registry import ProviderSetupError, build_provider
 
 CAPABILITY_FLAGS = (
@@ -80,18 +81,14 @@ class TestNoSilentCapabilityLoss:
 
     def test_valid_config_still_builds(self, monkeypatch):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
-        assert build_provider(
-            "claude-sonnet-4-5", MODEL_REGISTRY["claude-sonnet-4-5"]
-        ) is not None
+        assert build_provider("claude-sonnet-4-5", MODEL_REGISTRY["claude-sonnet-4-5"]) is not None
 
 
 class TestGeminiCorrectness:
     """Gemini diverged from the other two on several counts. Each is now pinned."""
 
     def _usage(self, **kw):
-        base = dict(
-            prompt_token_count=10, candidates_token_count=5, thoughts_token_count=0
-        )
+        base = dict(prompt_token_count=10, candidates_token_count=5, thoughts_token_count=0)
         base.update(kw)
         return SimpleNamespace(**base)
 
@@ -102,12 +99,12 @@ class TestGeminiCorrectness:
         stop_reason was inferred from content alone, so MAX_TOKENS reported
         end_turn and the user saw a half-answer with no signal.
         """
+        from runnrr.providers.gemini_provider import GeminiProvider
         from tests.test_providers import (
             FakeGeminiClient,
             _drain_gemini,
             _gemini_chunk,
         )
-        from runnrr.providers.gemini_provider import GeminiProvider
 
         chunk = _gemini_chunk(text="partial", finish_reason="MAX_TOKENS")
         provider = GeminiProvider(client=FakeGeminiClient([chunk]))
@@ -118,12 +115,12 @@ class TestGeminiCorrectness:
 
     @pytest.mark.asyncio
     async def test_safety_finish_surfaces_an_error_event(self):
+        from runnrr.providers.gemini_provider import GeminiProvider
         from tests.test_providers import (
             FakeGeminiClient,
             _drain_gemini,
             _gemini_chunk,
         )
-        from runnrr.providers.gemini_provider import GeminiProvider
 
         chunk = _gemini_chunk(text="", finish_reason="SAFETY")
         provider = GeminiProvider(client=FakeGeminiClient([chunk]))
@@ -133,12 +130,12 @@ class TestGeminiCorrectness:
 
     @pytest.mark.asyncio
     async def test_normal_finish_still_ends_the_turn(self):
+        from runnrr.providers.gemini_provider import GeminiProvider
         from tests.test_providers import (
             FakeGeminiClient,
             _drain_gemini,
             _gemini_chunk,
         )
-        from runnrr.providers.gemini_provider import GeminiProvider
 
         chunk = _gemini_chunk(text="all done", finish_reason="STOP")
         provider = GeminiProvider(client=FakeGeminiClient([chunk]))
@@ -194,6 +191,7 @@ class TestToolUseStartParity:
         different counts depending on which provider ran it. Anthropic was
         already correct.
         """
+        from runnrr.providers.openai_compat_provider import OpenAICompatProvider
         from tests.test_providers import (
             FakeOpenAIClient,
             _choice,
@@ -202,17 +200,34 @@ class TestToolUseStartParity:
             _drain,
             _tool_call,
         )
-        from runnrr.providers.openai_compat_provider import OpenAICompatProvider
 
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(tool_calls=[
-                _tool_call(index=0, id_="c1", name="read_file", args="{}"),
-            ]))]),
-            _chunk(choices=[_choice(delta=_delta(tool_calls=[
-                _tool_call(index=1, id_="c2", name="read_file", args="{}"),
-            ]))]),
-            _chunk(choices=[_choice(finish_reason="tool_calls")]),
-        ])
+        client = FakeOpenAIClient(
+            [
+                _chunk(
+                    choices=[
+                        _choice(
+                            delta=_delta(
+                                tool_calls=[
+                                    _tool_call(index=0, id_="c1", name="read_file", args="{}"),
+                                ]
+                            )
+                        )
+                    ]
+                ),
+                _chunk(
+                    choices=[
+                        _choice(
+                            delta=_delta(
+                                tool_calls=[
+                                    _tool_call(index=1, id_="c2", name="read_file", args="{}"),
+                                ]
+                            )
+                        )
+                    ]
+                ),
+                _chunk(choices=[_choice(finish_reason="tool_calls")]),
+            ]
+        )
         provider = OpenAICompatProvider(api_key_env="X", client=client)
 
         events = await _drain(provider, [])

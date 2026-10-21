@@ -56,9 +56,12 @@ async def test_exhaustion_prevents_provider_call(monkeypatch, fake_provider_cls)
         yield {"type": "message_done"}
 
     monkeypatch.setattr(provider, "stream", stream)
-    events = [event async for event in run_conversation_stream(
-        "hello", {"messages": []}, provider, "test-model"
-    )]
+    events = [
+        event
+        async for event in run_conversation_stream(
+            "hello", {"messages": []}, provider, "test-model"
+        )
+    ]
     assert not called
     assert events[-1]["event"] == "error"
 
@@ -69,9 +72,12 @@ async def test_failed_call_retains_reservation(fake_provider_cls):
     from runnrr.budget import TOKEN_BUDGET
 
     provider = fake_provider_cls([[{"type": "error", "text": "timeout"}]])
-    events = [event async for event in run_conversation_stream(
-        "hello", {"messages": []}, provider, "test-model"
-    )]
+    events = [
+        event
+        async for event in run_conversation_stream(
+            "hello", {"messages": []}, provider, "test-model"
+        )
+    ]
     assert events[-1]["event"] == "error"
     assert TOKEN_BUDGET.stats()["used"] > 0
 
@@ -90,15 +96,19 @@ async def test_gemini_typed_messages_can_be_reserved(monkeypatch):
         yield {"type": "message_done", "stop_reason": "end_turn"}
 
     monkeypatch.setattr(provider, "stream", stream)
-    events = [event async for event in run_conversation_stream(
-        "hello", {"messages": []}, provider, "gemini-2.5-flash"
-    )]
+    events = [
+        event
+        async for event in run_conversation_stream(
+            "hello", {"messages": []}, provider, "gemini-2.5-flash"
+        )
+    ]
     assert called
     assert not any(event["event"] == "error" for event in events)
 
 
 def test_paid_budget_is_atomic_and_shared_by_operations(monkeypatch):
     from runnrr.budget import reserve_paid_call
+
     monkeypatch.setenv("DEMO_REQUEST_COST_BOUNDS", '{"a":100000,"b":100000}')
 
     def attempt(index):
@@ -116,6 +126,7 @@ def test_paid_budget_is_atomic_and_shared_by_operations(monkeypatch):
 
 def test_unconfigured_price_stops_search_before_network(monkeypatch):
     from runnrr.web_search import web_search
+
     monkeypatch.setenv("TAVILY_API_KEY", "test")
     monkeypatch.delenv("DEMO_REQUEST_COST_BOUNDS", raising=False)
 

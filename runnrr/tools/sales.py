@@ -1,4 +1,5 @@
 """Sales profile catalog, lead, and checkout preview tools."""
+
 from __future__ import annotations
 
 import hashlib
@@ -123,7 +124,9 @@ def _recommend_package_id(use_case: str, integrations: list[str]) -> tuple[str, 
     if any(term in text for term in ("tool", "api", "integration", "stripe", "calendar", "crm")):
         reasons.append("custom tool or integration need")
         return "custom-tools", reasons
-    if any(term in text for term in ("production", "deploy", "security", "rate", "budget", "logging")):
+    if any(
+        term in text for term in ("production", "deploy", "security", "rate", "budget", "logging")
+    ):
         reasons.append("production readiness concern")
         return "production-hardening", reasons
     reasons.append("starter website widget fit")
@@ -159,7 +162,9 @@ def qualify_lead(
     urgency_text = str(urgency or "").lower()
     budget_text = str(budget_range or "").lower()
     high_urgency = any(term in urgency_text for term in ("urgent", "now", "this week", "asap"))
-    meaningful_budget = any(term in budget_text for term in ("5k", "10k", "5000", "10000", "approved"))
+    meaningful_budget = any(
+        term in budget_text for term in ("5k", "10k", "5000", "10000", "approved")
+    )
     has_integrations = bool(integrations)
     if high_urgency and (meaningful_budget or has_integrations):
         tier = "high"

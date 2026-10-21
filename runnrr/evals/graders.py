@@ -1,4 +1,5 @@
 """Deterministic retrieval graders and optional LLM rubric graders."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -62,9 +63,7 @@ def grade_context_precision(
     )
 
 
-def reciprocal_rank(
-    retrieved_paths: list[str], expected_paths: list[str]
-) -> float:
+def reciprocal_rank(retrieved_paths: list[str], expected_paths: list[str]) -> float:
     """Reciprocal rank of the first relevant path in deduped retrieval order."""
     expected_set = set(dedupe_paths(list(expected_paths)))
     if not expected_set:
@@ -80,9 +79,7 @@ def _default_grade_fn(prompt: str) -> Any:
     from runnrr import config
     from runnrr.llm_json import complete_json
 
-    return complete_json(
-        prompt, model_id=config.GRADER_MODEL_ID, system=GRADER_SYSTEM
-    )
+    return complete_json(prompt, model_id=config.GRADER_MODEL_ID, system=GRADER_SYSTEM)
 
 
 def _score_from(raw: Any) -> tuple[float, str]:
@@ -98,9 +95,7 @@ def _score_from(raw: Any) -> tuple[float, str]:
     return normalized, reasoning
 
 
-def _rubric_grade(
-    prompt: str, grade_fn: Callable[[str], Any] | None
-) -> GradeResult:
+def _rubric_grade(prompt: str, grade_fn: Callable[[str], Any] | None) -> GradeResult:
     """Run one rubric prompt through the grader and normalize its 0-10 score."""
     raw = (grade_fn or _default_grade_fn)(prompt)
     score, reasoning = _score_from(raw)

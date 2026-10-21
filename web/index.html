@@ -6,47 +6,73 @@
   <meta name="description" content="Runnrr — a workspace for your business agents.">
   <meta name="color-scheme" content="light">
   <title>Runnrr — Workstation</title>
-  <link rel="icon" href="data:,">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="/vendor/icons/bolt.svg">
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/app.mjs"></script>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to workspace</a>
+  <a class="skip-link" href="#main">Skip to conversation</a>
   <div class="workstation">
     <button id="sidebar-backdrop" class="backdrop" aria-label="Close navigation" hidden></button>
-    <aside id="sidebar" class="sidebar" aria-label="Workspace navigation">
-      <div class="sidebar-top">
-        <div class="brand-row"><a class="wordmark" href="/">Runnrr<span class="brand-period">.</span></a><span id="runtime-status" class="status-pill"><span class="status-dot"></span>Connecting</span><button id="close-nav" class="icon-button mobile-only" aria-label="Close navigation"><img src="/vendor/icons/x-mark.svg" alt=""></button></div>
-        <div class="segmented" aria-label="Sidebar view"><button id="chats-tab" aria-pressed="true">Chats</button><button id="agents-tab" aria-pressed="false">Agents</button></div>
-      </div>
-      <nav class="primary-nav" aria-label="Workspace"><button data-view="capabilities"><img src="/vendor/icons/squares-2x2.svg" alt="">Skills &amp; Tools</button><button data-view="channels"><img src="/vendor/icons/chat-bubble-left-right.svg" alt="">Channels</button><button data-view="automations"><img src="/vendor/icons/bolt.svg" alt="">Automations</button><button data-view="files"><img src="/vendor/icons/folder.svg" alt="">Files &amp; Links</button></nav>
-      <div class="sidebar-controls"><button id="new-chat" class="new-chat"><img src="/vendor/icons/plus.svg" alt="">New chat<span class="key-hint">⌘ ↵</span></button><label class="search-field"><img src="/vendor/icons/magnifying-glass.svg" alt=""><input id="sidebar-search" type="search" aria-label="Search chats" placeholder="Search chats"><kbd>⌘ K</kbd></label></div>
-      <div id="sidebar-list" class="sidebar-list"><p class="sidebar-empty">Loading your workspace…</p></div>
-      <footer class="sidebar-footer"><div id="agent-dock" class="agent-dock" aria-label="Choose an agent"></div><div class="workspace-note"><img src="/vendor/icons/clock.svg" alt=""><span>Temporary workspace</span><button id="session-info" class="text-button" aria-label="About temporary chats">Details</button></div></footer>
+    <aside id="sidebar" class="sidebar" aria-label="Threads">
+      <div class="brand-row"><a class="wordmark" href="/">Runnrr<span>Workspace</span></a><button id="close-nav" class="icon-button" aria-label="Collapse sidebar" title="Collapse sidebar"><img src="/vendor/icons/panel-left.svg" alt=""></button></div>
+      <div class="sidebar-controls"><label class="search-field"><img src="/vendor/icons/magnifying-glass.svg" alt=""><input id="sidebar-search" type="search" aria-label="Search threads" placeholder="Search"><kbd id="search-shortcut">⌘ K</kbd></label><button id="search-projects" class="icon-button" aria-label="Search projects" title="Search projects"><img src="/vendor/icons/folder.svg" alt=""></button><button id="add-project" class="icon-button" aria-label="Add project" title="Add project"><img src="/vendor/icons/folder-plus.svg" alt=""></button><button id="new-chat" class="icon-button" aria-label="New thread" title="New thread"><img src="/vendor/icons/pencil-square.svg" alt=""></button></div>
+      <div id="sidebar-list" class="sidebar-list"><p class="sidebar-empty">Loading threads…</p></div>
+      <div id="thread-shelves" class="thread-shelves"></div>
+      <footer class="sidebar-footer"><button id="workspace-settings" class="icon-button" aria-label="Settings" title="Settings"><img src="/vendor/icons/cog-6-tooth.svg" alt=""></button><span id="runtime-status" class="runtime-status" role="status">Connecting…</span><button id="session-info" class="icon-button" aria-label="About temporary threads" title="About this workspace"><img src="/vendor/icons/information-circle.svg" alt=""></button></footer>
     </aside>
     <main id="main" class="main" tabindex="-1">
-      <header class="workspace-header"><button id="open-nav" class="icon-button mobile-only" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false"><img src="/vendor/icons/bars-3.svg" alt=""></button><div id="header-identity" class="header-identity"></div><div class="header-actions"><span id="model-label" class="model-label"></span><button id="files-toggle" class="soft-button" aria-expanded="false" aria-controls="file-panel"><img src="/vendor/icons/folder.svg" alt="">Files</button></div></header>
+      <header class="workspace-header"><button id="open-nav" class="icon-button" aria-label="Open sidebar" aria-controls="sidebar" aria-expanded="true"><img src="/vendor/icons/panel-left.svg" alt=""></button><div id="header-identity" class="header-identity"></div><div class="header-actions"><button id="thread-actions" class="icon-button" aria-label="Thread actions" title="Thread actions"><img src="/vendor/icons/ellipsis-horizontal.svg" alt=""></button><button id="panel-toggle" class="icon-button" aria-label="Toggle workspace panel" aria-controls="workspace-panel" aria-expanded="true" title="Workspace panel"><img src="/vendor/icons/panel-right.svg" alt=""></button></div></header>
       <div id="connection-banner" class="connection-banner" role="alert" hidden><span id="connection-message"></span><button id="reconnect" class="text-button">Reconnect</button></div>
-      <section id="chat-view" class="chat-view" aria-label="Chat">
-        <div class="chat-column">
+      <div class="workspace-body">
+        <section id="chat-column" class="chat-column" aria-label="Chat">
           <div id="transcript" class="transcript" tabindex="0" aria-label="Conversation"></div>
-          <button id="scroll-bottom" class="scroll-bottom soft-button" hidden>Latest message<img src="/vendor/icons/arrow-up.svg" alt=""></button>
+          <button id="scroll-bottom" class="scroll-bottom icon-button" aria-label="Jump to latest message" hidden><img src="/vendor/icons/arrow-up.svg" alt=""></button>
           <form id="composer-form" class="composer-wrap">
-            <div id="composer-context" class="composer-context"></div>
-            <div class="composer"><button class="icon-button attach-button" type="button" disabled title="Attachments are not available yet" aria-label="Attachments — not available yet"><img src="/vendor/icons/plus.svg" alt=""></button><label class="sr-only" for="composer-input">Message your agent</label><textarea id="composer-input" rows="1" maxlength="4000" placeholder="Tell your agent what to do…" disabled></textarea><button id="send-button" class="send-button" type="submit" aria-label="Send message" disabled><img src="/vendor/icons/arrow-up.svg" alt=""></button></div>
-            <div class="composer-footer"><span id="composer-hint">Chats clear when you reload this page.</span><span id="turn-status" role="status"></span></div>
+            <div id="composer-context" class="composer-context" role="status"></div>
+            <div class="composer">
+              <label class="sr-only" for="composer-input">Message your assistant</label><textarea id="composer-input" rows="2" maxlength="4000" placeholder="What would you like to get done?" disabled></textarea>
+              <div class="composer-toolbar">
+                <label class="composer-control assistant-control" title="Choose assistant"><img src="/vendor/icons/squares-2x2.svg" alt=""><span class="sr-only">Assistant</span><select id="assistant-select" aria-label="Assistant"></select></label>
+                <span class="toolbar-divider"></span>
+                <label class="composer-control model-control" title="Choose model; starts a new thread after a conversation begins"><img src="/vendor/icons/cpu-chip.svg" alt=""><span class="sr-only">Model</span><select id="model-select" aria-label="Model"></select></label>
+                <button id="abilities-toggle" class="icon-button" type="button" aria-label="View assistant abilities" title="Assistant abilities"><img src="/vendor/icons/adjustments-horizontal.svg" alt=""></button>
+                <button id="send-button" class="send-button" type="submit" aria-label="Send message" disabled><img src="/vendor/icons/arrow-up.svg" alt=""></button>
+              </div>
+            </div>
+            <div class="composer-footer"><span>Threads stay here until you reload.</span><span id="turn-status" role="status">Enter to send · Shift Enter for a new line</span></div>
           </form>
-        </div>
-        <aside id="file-panel" class="file-panel" aria-label="Files and sources" hidden><div class="panel-heading"><h2>Files &amp; sources</h2><button id="close-files" class="icon-button" aria-label="Close files panel"><img src="/vendor/icons/x-mark.svg" alt=""></button></div><div id="file-panel-content"></div></aside>
-      </section>
-      <section id="workspace-view" class="workspace-view" aria-label="Workspace section" hidden></section>
+        </section>
+        <aside id="workspace-panel" class="workspace-panel" aria-label="Workspace panel">
+          <div id="panel-resizer" class="panel-resizer" role="separator" aria-orientation="vertical" aria-label="Resize workspace panel" aria-controls="workspace-panel" aria-valuemin="280" aria-valuemax="560" aria-valuenow="340" tabindex="0"></div>
+          <div class="panel-heading"><button id="panel-home" class="icon-button" aria-label="All panels" title="All panels"><img src="/vendor/icons/squares-2x2.svg" alt=""></button><h2 id="panel-title">Workspace</h2><button id="close-panel" class="icon-button" aria-label="Close workspace panel"><img src="/vendor/icons/x-mark.svg" alt=""></button></div>
+          <div id="panel-content" class="panel-content"></div>
+        </aside>
+      </div>
     </main>
   </div>
-  <dialog id="info-dialog"><form method="dialog"><div class="panel-heading"><h2>About this workspace</h2><button class="icon-button" aria-label="Close"><img src="/vendor/icons/x-mark.svg" alt=""></button></div><p>Chats, pins, and drafts stay in this page until you reload or close it. Runtime restarts and inactivity can also reset your agent’s conversation context.</p><p>Saved chat history is coming in a later update. Copy anything you want to keep before leaving.</p><button class="primary-button">Got it</button></form></dialog>
-  <div id="toast" class="toast" role="status" hidden></div>
+  <div id="thread-menu" class="thread-menu" popover aria-label="Thread actions"></div>
+  <dialog id="rename-dialog"><form id="rename-form"><h2>Rename thread</h2><label for="thread-name">Thread name</label><input id="thread-name" maxlength="120" required autocomplete="off"><div class="dialog-actions"><button type="button" data-close-dialog="rename-dialog">Cancel</button><button class="primary-button" type="submit">Save name</button></div></form></dialog>
+  <dialog id="delete-dialog"><form id="delete-form"><h2>Delete this thread?</h2><p>This removes it from this temporary workspace. You can undo immediately afterward.</p><div class="dialog-actions"><button type="button" data-close-dialog="delete-dialog">Cancel</button><button class="danger-button" type="submit">Delete thread</button></div></form></dialog>
+  <dialog id="info-dialog"><form method="dialog"><h2>Your local workspace</h2><p>Threads, drafts, pins, and snooze times stay in this page until you reload or close it. Copy anything you want to keep.</p><p>Snoozing hides a thread until its wake time while this page is open. It does not schedule an assistant task. Settling puts a thread away without deleting it.</p><p>Runtime restarts and inactivity can also reset conversation context. Saved history is not available yet.</p><div class="dialog-actions"><button class="primary-button">Got it</button></div></form></dialog>
+  <dialog id="project-picker" class="project-picker" aria-labelledby="picker-heading">
+    <div class="picker-search"><button id="picker-back" class="icon-button" aria-label="Go back"><img src="/vendor/icons/arrow-left.svg" alt=""></button><input id="picker-query" type="search" placeholder="Search…" aria-label="Search choices" autocomplete="off"><button class="icon-button" data-close-dialog="project-picker" aria-label="Close"><img src="/vendor/icons/x-mark.svg" alt=""></button></div>
+    <h2 id="picker-heading">Choose an assistant</h2><div id="picker-results" class="picker-results"></div>
+    <footer class="picker-footer"><span><kbd>↑</kbd> <kbd>↓</kbd> Navigate</span><span><kbd>Enter</kbd> Select</span><span><kbd>Esc</kbd> Close</span></footer>
+  </dialog>
+  <dialog id="add-project-dialog" aria-labelledby="add-project-heading">
+    <form id="add-project-form"><h2 id="add-project-heading">Add a project</h2>
+      <label for="project-name">Project name</label><input id="project-name" maxlength="80" required placeholder="My project">
+      <label for="project-repository">Public GitHub repository</label><input id="project-repository" placeholder="github.com/owner/repository" autocomplete="off">
+      <p>Import its README, description, and latest release. Or choose a folder of text files.</p>
+      <label class="folder-upload" for="project-files">Choose folder<input id="project-files" type="file" webkitdirectory multiple></label><p id="project-file-summary">No files chosen.</p>
+      <p class="panel-note">Selected text files are uploaded to this runtime for your assistant to read. Hidden files, dependencies, and binary files are skipped. Up to 80 files, 200 KB each, 1 MB total.</p>
+      <p id="project-create-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" data-close-dialog="add-project-dialog">Cancel</button><button id="project-save" class="primary-button">Add project</button></div>
+    </form>
+  </dialog>
+  <dialog id="settings-dialog" aria-labelledby="settings-heading"><h2 id="settings-heading">Settings</h2><p>Projects are saved on this runtime. This browser’s workspace key keeps your added projects separate from other visitors. Clearing browser data loses access to them.</p><button id="manage-projects" class="settings-row">Projects &amp; knowledge<img src="/vendor/icons/chevron-right.svg" alt=""></button><button id="settings-assistants" class="settings-row">Assistants<img src="/vendor/icons/chevron-right.svg" alt=""></button><p>Threads stay temporary and clear when you reload.</p><div class="dialog-actions"><button class="primary-button" data-close-dialog="settings-dialog">Done</button></div></dialog>
+  <div id="toast" class="toast" role="status" hidden><span id="toast-message"></span><button id="undo-action" hidden>Undo</button></div>
   <noscript><p>Enable JavaScript to use the Runnrr workstation.</p></noscript>
 </body>
 </html>

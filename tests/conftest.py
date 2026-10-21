@@ -1,4 +1,5 @@
 """Shared pytest fixtures. Points the KB at tests/fixtures/mini_kb/ for all tests."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,6 +23,13 @@ def use_mini_kb(monkeypatch):
     monkeypatch.setattr(config, "KB_ROOT", FIXTURE_KB)
     monkeypatch.setattr(kb_loader, "KB_ROOT", FIXTURE_KB)
     return FIXTURE_KB
+
+
+@pytest.fixture(autouse=True)
+def isolated_usage_history(monkeypatch, tmp_path):
+    from runnrr import metrics
+
+    monkeypatch.setattr(metrics, "DB_PATH", tmp_path / "usage.sqlite")
 
 
 @pytest.fixture(autouse=True)
@@ -86,6 +94,7 @@ def client(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("DEFAULT_PROFILE", "personal-agent")
     import importlib
+
     from runnrr import config
 
     importlib.reload(config)
@@ -135,7 +144,9 @@ def paid_test_bounds(monkeypatch):
     # Only synthetic amounts for mocked SDK calls. Never use this configuration
     # for real providers; each test already injects fake clients/transports.
     import json
+
     from runnrr.config import MODEL_REGISTRY
+
     names = {cfg["model"] for cfg in MODEL_REGISTRY.values()} | {"test", "gpt-test", "m"}
     bounds = {f"llm:{name}": 1000 for name in names}
     bounds.update({"tavily:basic": 1000, "tavily:advanced": 1000})

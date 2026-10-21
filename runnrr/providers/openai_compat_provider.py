@@ -3,11 +3,12 @@
 This covers OpenAI proper and Moonshot/Kimi because Kimi exposes an
 OpenAI-compatible /chat/completions API for function tools.
 """
+
 from __future__ import annotations
 
 import json
-import os
 import logging
+import os
 from typing import Any, AsyncIterator
 
 from openai import AsyncOpenAI
@@ -124,7 +125,11 @@ class OpenAICompatProvider:
             for choice in getattr(chunk, "choices", []) or []:
                 finish_reason = getattr(choice, "finish_reason", None)
                 if finish_reason:
-                    stop_reason = "tool_use" if finish_reason == "tool_calls" else "end_turn"
+                    stop_reason = {
+                        "tool_calls": "tool_use",
+                        "stop": "end_turn",
+                        "length": "max_tokens",
+                    }.get(finish_reason, "blocked")
 
                 delta = getattr(choice, "delta", None)
                 if delta is None:
@@ -184,7 +189,11 @@ class OpenAICompatProvider:
             "role": "assistant",
             "content": "".join(content_parts) or None,
         }
-        completed_tool_calls = [tool_calls[i] for i in sorted(tool_calls)]
+        completed_tool_calls = (
+            [tool_calls[i] for i in sorted(tool_calls)]
+            if stop_reason not in {"max_tokens", "blocked"}
+            else []
+        )
         if completed_tool_calls:
             assistant_msg["tool_calls"] = completed_tool_calls
             stop_reason = "tool_use"
@@ -234,13 +243,11 @@ def _estimate_usage(
 ) -> UsagePayload:
     """Crude chars/4 fallback for endpoints that report no usage at all."""
     prompt_chars = len(json.dumps(prompt_messages, default=str))
-    output_chars = sum(len(t) for t in content_parts) + len(
-        json.dumps(tool_calls, default=str)
-    )
+    output_chars = sum(len(t) for t in content_parts) + len(json.dumps(tool_calls, default=str))
     reasoning_chars = sum(len(t) for t in reasoning_parts)
     return {
         "input_tokens": max(1, prompt_chars // 4),
-        "output_tokens": max(0, output_chars // 4),
+        "output_tokens": max(0, output_chars // 4) + max(0, reasoning_chars // 4),
         "reasoning_tokens": max(0, reasoning_chars // 4),
         "estimated": True,
         "cache_read_input_tokens": 0,
@@ -297,14 +304,12 @@ def _norm_usage(u: Any) -> UsagePayload:
                 )
                 or 0
             )
-    # reasoning_tokens is a subset of completion_tokens (see comment above), so make
-    # them disjoint here — the frontend buckets reasoning separately and would
-    # double-count if output_tokens still included it.
+    # Preserve inclusive output; reasoning is a drill-down, never an addend.
     output_total = output_tokens or 0
     reasoning = max(0, min(reasoning_tokens, output_total))
     return {
         "input_tokens": input_tokens or 0,
-        "output_tokens": output_total - reasoning,
+        "output_tokens": output_total,
         "reasoning_tokens": reasoning,
         "cache_read_input_tokens": cache_hit,
         "cache_creation_input_tokens": 0,

@@ -4,6 +4,7 @@ These lock down the contract in runnrr/usage.py. Before it existed, the same
 turn produced different totals depending on which consumer counted it, and
 `cache_read` meant three different things depending on the provider.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -78,11 +79,11 @@ class TestCacheSemantics:
         assert anthropic_usage(u)["input_tokens"] == 100
 
 
-class TestReasoningDisjointness:
-    def test_anthropic_subtracts_reasoning_from_output(self):
+class TestReasoningSubset:
+    def test_anthropic_includes_reasoning_in_output(self):
         u = SimpleNamespace(input_tokens=10, output_tokens=100)
         got = anthropic_usage(u, thinking_tokens=30)
-        assert got["output_tokens"] == 70
+        assert got["output_tokens"] == 100
         assert got["reasoning_tokens"] == 30
         assert got["reasoning_estimated"] is True
 
@@ -90,49 +91,52 @@ class TestReasoningDisjointness:
         u = SimpleNamespace(input_tokens=10, output_tokens=100)
         assert anthropic_usage(u, thinking_tokens=0)["reasoning_estimated"] is False
 
-    def test_gemini_reasoning_disjoint_from_output(self):
-        # Gemini's contract is total = prompt + candidates + thoughts, so thoughts
-        # are ALREADY disjoint. Subtracting here (as the other two must) would
-        # double-discount. This pins that Gemini is deliberately left alone.
+    def test_gemini_adds_reasoning_to_output(self):
+        # Gemini candidates exclude thoughts, unlike the other APIs.
         u = SimpleNamespace(
             prompt_token_count=100,
             candidates_token_count=20,
             thoughts_token_count=7,
         )
         got = gemini_usage(u)
-        assert got["output_tokens"] == 20
+        assert got["output_tokens"] == 27
         assert got["reasoning_tokens"] == 7
 
-    def test_openai_subtracts_reasoning_from_output(self):
+    def test_openai_includes_reasoning_in_output(self):
         u = SimpleNamespace(
             prompt_tokens=10,
             completion_tokens=100,
             completion_tokens_details=SimpleNamespace(reasoning_tokens=40),
         )
         got = openai_usage(u)
-        assert got["output_tokens"] == 60
+        assert got["output_tokens"] == 100
         assert got["reasoning_tokens"] == 40
 
 
 class TestReducer:
-    def test_billable_total_charges_reasoning(self):
-        # The old total was input + output only, so extended thinking was billed
-        # by the vendor and free against DAILY_TOKEN_BUDGET.
-        acc = tally(zero_tokens(), {
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "reasoning_tokens": 25,
-        })
-        assert billable_total(acc) == 175
+    def test_billable_total_counts_reasoning_once(self):
+        # Reasoning is already included in output.
+        acc = tally(
+            zero_tokens(),
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "reasoning_tokens": 25,
+            },
+        )
+        assert billable_total(acc) == 150
 
     def test_billable_total_excludes_cache_fields(self):
         # They are subsets of input; adding them would double-count.
-        acc = tally(zero_tokens(), {
-            "input_tokens": 1000,
-            "output_tokens": 10,
-            "cache_read_input_tokens": 900,
-            "cache_creation_input_tokens": 50,
-        })
+        acc = tally(
+            zero_tokens(),
+            {
+                "input_tokens": 1000,
+                "output_tokens": 10,
+                "cache_read_input_tokens": 900,
+                "cache_creation_input_tokens": 50,
+            },
+        )
         assert billable_total(acc) == 1010
 
     def test_tally_accumulates_across_hops(self):
@@ -150,14 +154,20 @@ class TestPricing:
 
     def test_cache_read_is_cheaper_than_fresh_input(self):
         fresh = tally(zero_tokens(), {"input_tokens": 1_000_000})
-        cached = tally(zero_tokens(), {
-            "input_tokens": 1_000_000,
-            "cache_read_input_tokens": 1_000_000,
-        })
+        cached = tally(
+            zero_tokens(),
+            {
+                "input_tokens": 1_000_000,
+                "cache_read_input_tokens": 1_000_000,
+            },
+        )
         assert cost_usd("claude-haiku-4-5", cached) < cost_usd("claude-haiku-4-5", fresh)
 
     def test_reasoning_billed_at_output_rate(self):
-        acc = tally(zero_tokens(), {"input_tokens": 0, "reasoning_tokens": 1_000_000})
+        acc = tally(
+            zero_tokens(),
+            {"input_tokens": 0, "output_tokens": 1_000_000, "reasoning_tokens": 1_000_000},
+        )
         assert cost_usd("claude-haiku-4-5", acc) == pytest.approx(5.00)
 
     def test_every_price_entry_names_a_real_model(self):
@@ -179,3 +189,73 @@ class TestRegistryUsageReporting:
             if cfg.get("stream_options") is False and not cfg.get("usage_unsupported")
         ]
         assert not offenders, f"models with usage silently off: {offenders}"
+
+
+def test_all_providers_agree_on_inclusive_totals_and_prices():
+    reports = [
+        anthropic_usage(
+            SimpleNamespace(
+                input_tokens=30,
+                cache_read_input_tokens=60,
+                cache_creation_input_tokens=10,
+                output_tokens=30,
+            ),
+            10,
+        ),
+        openai_usage(
+            SimpleNamespace(
+                prompt_tokens=100,
+                completion_tokens=30,
+                completion_tokens_details={"reasoning_tokens": 10},
+                prompt_cache_hit_tokens=60,
+            )
+        ),
+        gemini_usage(
+            SimpleNamespace(
+                prompt_token_count=100,
+                candidates_token_count=20,
+                thoughts_token_count=10,
+                cached_content_token_count=60,
+            )
+        ),
+    ]
+    for report in reports:
+        assert report["input_tokens"] == 100
+        assert report["output_tokens"] == 30 and report["reasoning_tokens"] == 10
+        assert billable_total(tally(zero_tokens(), report)) == 130
+
+
+def test_fallback_output_includes_estimated_reasoning():
+    from runnrr.providers.openai_compat_provider import _estimate_usage
+
+    report = _estimate_usage([], ["text"], ["thinking"], [])
+    assert report["estimated"]
+    assert report["reasoning_tokens"] == 2
+    assert report["output_tokens"] == 3
+
+
+def test_eval_summary_supports_old_and_new_usage(monkeypatch):
+    from runnrr.evals.records import build_summary
+    from runnrr.profiles import load_profile
+    from runnrr.rag.indexer import Indexer
+
+    monkeypatch.setattr(Indexer, "info", lambda self: (_ for _ in ()).throw(RuntimeError()))
+    common = dict(variant="keyword", status="ok", metrics={}, latency_ms=10, case_id="one")
+    summary = build_summary(
+        [
+            {**common, "tokens": {"input": 100, "output": 20, "reasoning": 5, "cache_read": 60}},
+            {
+                **common,
+                "usage_version": 2,
+                "tokens": {"input": 100, "output": 25, "reasoning": 5, "cache_read": 60},
+            },
+        ],
+        run_id="test",
+        profile=load_profile("research-analyst"),
+        embedding=SimpleNamespace(backend="test", model="test", dim=1),
+        index_dir=None,
+        mode="end-to-end",
+        variants=("keyword",),
+        model_id="test",
+    )
+    assert summary["per_variant"]["keyword"]["tokens_total"] == 250

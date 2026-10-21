@@ -1,4 +1,5 @@
 """Tool dispatch envelope."""
+
 from __future__ import annotations
 
 import json
@@ -59,7 +60,9 @@ def _run_tool_inner(
                 tool_use_id=tool_use_id,
                 name=name,
                 content=json.dumps(
-                    {"error": "tool arguments were not valid JSON; retry with well-formed JSON arguments"}
+                    {
+                        "error": "tool arguments were not valid JSON; retry with well-formed JSON arguments"
+                    }
                 ),
                 is_error=True,
                 arguments=arguments,
@@ -93,7 +96,7 @@ def _run_tool_inner(
             arguments=arguments,
             context=context,
         )
-    except Exception as e:
+    except Exception:
         log.exception("tool %s failed unexpectedly", name)
         if config.TOOL_DEBUG_ERRORS:
             raise

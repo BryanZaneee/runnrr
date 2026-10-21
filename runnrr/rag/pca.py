@@ -1,4 +1,5 @@
 """PCA sidecar for 2-D retrieval map visualization at index build time."""
+
 from __future__ import annotations
 
 import json

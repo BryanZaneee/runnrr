@@ -271,51 +271,60 @@ def test_cli_build_info_and_query_with_fake_backend(
 
     from runnrr.rag import cli
 
-    assert cli.main(
-        [
-            "--profile-root",
-            str(profile_root),
-            "--index-root",
-            str(index_root),
-            "--backend",
-            "fake",
-            "build",
-            "mini",
-        ]
-    ) == 0
+    assert (
+        cli.main(
+            [
+                "--profile-root",
+                str(profile_root),
+                "--index-root",
+                str(index_root),
+                "--backend",
+                "fake",
+                "build",
+                "mini",
+            ]
+        )
+        == 0
+    )
     build_out = json.loads(capsys.readouterr().out)
     assert build_out["embedded_chunks"] > 0
 
-    assert cli.main(
-        [
-            "--profile-root",
-            str(profile_root),
-            "--index-root",
-            str(index_root),
-            "--backend",
-            "fake",
-            "info",
-            "mini",
-        ]
-    ) == 0
+    assert (
+        cli.main(
+            [
+                "--profile-root",
+                str(profile_root),
+                "--index-root",
+                str(index_root),
+                "--backend",
+                "fake",
+                "info",
+                "mini",
+            ]
+        )
+        == 0
+    )
     info_out = json.loads(capsys.readouterr().out)
     assert info_out["stale"] is False
 
-    assert cli.main(
-        [
-            "--profile-root",
-            str(profile_root),
-            "--index-root",
-            str(index_root),
-            "--backend",
-            "fake",
-            "query",
-            "mini",
-            "portable profile retrieval",
-            "--k",
-            "2",
-        ]
-    ) == 0
+    assert (
+        cli.main(
+            [
+                "--profile-root",
+                str(profile_root),
+                "--index-root",
+                str(index_root),
+                "--backend",
+                "fake",
+                "query",
+                "mini",
+                "portable profile retrieval",
+                "--k",
+                "2",
+            ]
+        )
+        == 0
+    )
     query_out = json.loads(capsys.readouterr().out)
     assert query_out[0]["path"] == "projects/alpha.md"
 
@@ -366,8 +375,49 @@ def test_indexer_builds_without_pca_when_numpy_missing(
 
     monkeypatch.setattr(builtins, "__import__", blocked_import)
     index_dir = tmp_path / "index"
-    report = Indexer(
-        mini_profile, FakeEmbeddingProvider(dim=64), index_dir=index_dir
-    ).build()
+    report = Indexer(mini_profile, FakeEmbeddingProvider(dim=64), index_dir=index_dir).build()
     assert report.embedded_chunks > 0
     assert not (index_dir / PCA_FILENAME).exists()
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_failed_build_preserves_published_generation(
+    sqlite_vec_available, tmp_path, mini_profile, monkeypatch, force
+):
+    root = tmp_path / "index"
+    embedding = FakeEmbeddingProvider()
+    indexer = Indexer(mini_profile, embedding, index_dir=root)
+    indexer.build()
+    before = {
+        name: (root / name).read_bytes() for name in ("manifest.json", "bm25.pkl", "index.sqlite")
+    }
+    generation = (root / "current").resolve()
+    (mini_profile.kb_root / "INDEX.md").write_text("# Changed\nChanged content")
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("embedding unavailable")
+
+    monkeypatch.setattr(embedding, "embed_documents", fail)
+    with pytest.raises(RuntimeError, match="embedding unavailable"):
+        indexer.build(force=force)
+    assert (root / "current").resolve() == generation
+    assert {name: (root / name).read_bytes() for name in before} == before
+    assert len(list((root / "generations").iterdir())) == 1
+
+
+def test_concurrent_cache_misses_share_retriever(sqlite_vec_available, tmp_path, mini_profile):
+    from concurrent.futures import ThreadPoolExecutor
+
+    root = tmp_path / "index"
+    provider = FakeEmbeddingProvider()
+    Indexer(mini_profile, provider, index_dir=root).build()
+    with ThreadPoolExecutor(max_workers=8) as workers:
+        retrievers = list(
+            workers.map(
+                lambda _: get_retriever_for_profile(
+                    mini_profile, embedding_provider=provider, index_dir=root
+                ),
+                range(20),
+            )
+        )
+    assert all(retriever is retrievers[0] for retriever in retrievers)

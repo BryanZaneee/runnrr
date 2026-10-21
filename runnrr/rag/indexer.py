@@ -1,16 +1,21 @@
 """Build and inspect per-profile RAG indexes."""
+
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import os
+import shutil
+import tempfile
+import uuid
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Iterable
 
 from runnrr import config
+from runnrr.kb_loader import _safe_resolve
 from runnrr.profiles import AgentProfile
 from runnrr.rag.bm25_index import BM25Index
 from runnrr.rag.chunker import Chunk, chunk_markdown
 from runnrr.rag.embeddings import EmbeddingProvider, get_embedding_provider
-from runnrr.kb_loader import _safe_resolve
 from runnrr.rag.manifest import FileEntry, Manifest, compute_diff, scan_markdown_files
 from runnrr.rag.pca import PCA_FILENAME, compute_pca_sidecar, write_pca_sidecar
 from runnrr.rag.vector_index import VectorIndex
@@ -71,6 +76,12 @@ def default_index_dir(profile: AgentProfile) -> Path:
     return (config.PROFILE_ROOT / profile.id / ".index").resolve()
 
 
+def resolve_index_dir(root: Path) -> Path:
+    """Resolve a published generation once so readers never mix index files."""
+    pointer = root / "current"
+    return pointer.resolve() if pointer.is_symlink() else root
+
+
 class Indexer:
     def __init__(
         self,
@@ -84,16 +95,56 @@ class Indexer:
         self.embedding = embedding_provider or get_embedding_provider()
         self.index_dir = (index_dir or default_index_dir(profile)).resolve()
         self.batch_size = max(1, int(batch_size or config.EMBED_BATCH_SIZE))
-        self.manifest_path = self.index_dir / MANIFEST_FILENAME
-        self.bm25_path = self.index_dir / BM25_FILENAME
-        self.vector_path = self.index_dir / VECTOR_FILENAME
+        self._refresh_paths()
+
+    def _refresh_paths(self) -> None:
+        current = resolve_index_dir(self.index_dir)
+        self.manifest_path = current / MANIFEST_FILENAME
+        self.bm25_path = current / BM25_FILENAME
+        self.vector_path = current / VECTOR_FILENAME
 
     def build(self, *, force: bool = False) -> BuildReport:
-        """Build or incrementally update the active profile index."""
+        """Build privately, then atomically publish one complete generation.
+
+        Previous generations remain readable by active retrieval connections.
+        They can be removed offline after the runtime has stopped.
+        """
+        self.index_dir.mkdir(parents=True, exist_ok=True)
+        generations = self.index_dir / "generations"
+        generations.mkdir(exist_ok=True)
+        current = resolve_index_dir(self.index_dir)
+        stage = Path(tempfile.mkdtemp(prefix="build-", dir=generations))
+        pointer = self.index_dir / (".current-" + uuid.uuid4().hex)
+        try:
+            for name in (MANIFEST_FILENAME, BM25_FILENAME, VECTOR_FILENAME, PCA_FILENAME):
+                if (current / name).is_file():
+                    shutil.copy2(current / name, stage / name)
+            builder = Indexer(
+                self.profile, self.embedding, index_dir=stage, batch_size=self.batch_size
+            )
+            report = builder._build_in_place(force=force)
+            pointer.symlink_to(stage.relative_to(self.index_dir), target_is_directory=True)
+            os.replace(pointer, self.index_dir / "current")
+        except BaseException:
+            pointer.unlink(missing_ok=True)
+            shutil.rmtree(stage)
+            raise
+        self._refresh_paths()
+        # Compatibility paths for CLI users; runtime readers resolve current once.
+        for name in (MANIFEST_FILENAME, BM25_FILENAME, VECTOR_FILENAME, PCA_FILENAME):
+            alias = self.index_dir / ("." + name + "-" + uuid.uuid4().hex)
+            alias.symlink_to(Path("current") / name)
+            os.replace(alias, self.index_dir / name)
+        self._clear_cached_retriever()
+        return replace(report, index_dir=str(self.index_dir))
+
+    def _build_in_place(self, *, force: bool = False) -> BuildReport:
         old_manifest = Manifest.load(self.manifest_path)
         current_files = scan_markdown_files(self.profile.kb_root)
         was_stale, stale_reason = self._stale_from_state(old_manifest, current_files)
-        embedding_changed = old_manifest is not None and not self._manifest_matches_embedding(old_manifest)
+        embedding_changed = old_manifest is not None and not self._manifest_matches_embedding(
+            old_manifest
+        )
         index_files_missing = self._index_files_missing()
         rebuilt = force or old_manifest is None or embedding_changed or index_files_missing
 
@@ -162,6 +213,7 @@ class Indexer:
 
     def is_stale(self) -> tuple[bool, str]:
         """Return (is_stale, reason) for the active profile index."""
+        self._refresh_paths()
         manifest = Manifest.load(self.manifest_path)
         current_files = scan_markdown_files(self.profile.kb_root)
         return self._stale_from_state(manifest, current_files)
@@ -207,9 +259,7 @@ class Indexer:
         manifest = Manifest.load(self.manifest_path)
         indexed_files = len(manifest.files) if manifest else 0
         indexed_chunks = (
-            sum(entry.chunk_count for entry in manifest.files.values())
-            if manifest
-            else 0
+            sum(entry.chunk_count for entry in manifest.files.values()) if manifest else 0
         )
         return IndexInfo(
             profile_id=self.profile.id,
@@ -251,10 +301,7 @@ class Indexer:
     ) -> None:
         pca_path = self.index_dir / PCA_FILENAME
         should_regenerate = (
-            embedded_chunks > 0
-            or deleted_vector_chunks > 0
-            or rebuilt
-            or not pca_path.exists()
+            embedded_chunks > 0 or deleted_vector_chunks > 0 or rebuilt or not pca_path.exists()
         )
         if not should_regenerate:
             return

@@ -3,8 +3,10 @@
 Single trust boundary: every path passes through `_safe_resolve()` before any
 filesystem op. Read-only. No write operations exist by design.
 """
+
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Iterator
 from pathlib import Path
@@ -16,6 +18,7 @@ MAX_LINES_PER_READ = 3000
 DEFAULT_LINES_PER_READ = 400
 LIST_ROOT_DEPTH = 1
 LIST_SUBDIR_DEPTH = 2
+
 
 # Aliases the model might use for project lookup. Maps lowercase input → file slug
 # under kb/projects/. Profile-specific aliases live in profile.json; this module
@@ -46,7 +49,7 @@ def _safe_resolve(rel: str, *, root: Path | None = None) -> Path:
 
 
 def _ignored_path(path: Path) -> bool:
-    return path.name.startswith(".") or "__pycache__" in path.parts
+    return any(part.startswith(".") or part == "__pycache__" for part in path.parts)
 
 
 def iter_kb_files(
@@ -62,8 +65,8 @@ def iter_kb_files(
     if not base.exists() or not base.is_dir():
         return
 
-    for path in sorted(base.rglob(pattern)):
-        if _ignored_path(path):
+    for path in _walk(base):
+        if not path.match(pattern):
             continue
         try:
             rel = path.relative_to(root_resolved).as_posix()
@@ -72,6 +75,18 @@ def iter_kb_files(
             continue
         if resolved.is_file():
             yield rel, resolved
+
+
+def _walk(base: Path, max_depth: int | None = None) -> Iterator[Path]:
+    # Prune before descent; never recurse through directory symlinks.
+    for current, dirs, files in os.walk(base, followlinks=False):
+        dirs[:] = sorted(d for d in dirs if not _ignored_path(Path(d)))
+        depth = len(Path(current).relative_to(base).parts)
+        for name in sorted(dirs + files):
+            if not _ignored_path(Path(name)):
+                yield Path(current) / name
+        if max_depth is not None and depth + 1 >= max_depth:
+            dirs.clear()
 
 
 def iter_markdown_files(*, root: Path | None = None) -> Iterator[tuple[str, Path]]:
@@ -96,7 +111,7 @@ def list_kb(subdir: str = "", *, root: Path | None = None) -> list[dict]:
     max_depth = LIST_ROOT_DEPTH if not subdir else LIST_SUBDIR_DEPTH
     root_resolved = _root(root)
     out: list[dict] = []
-    for entry in sorted(base.rglob("*")):
+    for entry in sorted(_walk(base, max_depth)):
         if len(entry.relative_to(base).parts) > max_depth:
             continue
         if _ignored_path(entry):
@@ -154,10 +169,7 @@ def read_file(
     encoded = slice_text.encode("utf-8")
     if len(encoded) > MAX_BYTES_PER_CALL:
         truncated = encoded[:MAX_BYTES_PER_CALL].decode("utf-8", errors="ignore")
-        slice_text = (
-            truncated
-            + f"\n[truncated; {len(encoded) - MAX_BYTES_PER_CALL} bytes omitted]"
-        )
+        slice_text = truncated + f"\n[truncated; {len(encoded) - MAX_BYTES_PER_CALL} bytes omitted]"
 
     return {
         "path": path,
@@ -175,6 +187,10 @@ def search_kb(
     root: Path | None = None,
 ) -> list[dict]:
     """Substring (case-insensitive) or regex search across KB files. Returns matches with context."""
+    try:
+        max_results = max(1, min(int(max_results), 100))
+    except (TypeError, ValueError) as exc:
+        raise KBError("max_results must be an integer") from exc
     if not query:
         raise KBError("query must not be empty")
     if regex:
@@ -182,10 +198,14 @@ def search_kb(
             pat = re.compile(query, re.IGNORECASE)
         except re.error as e:
             raise KBError(f"invalid regex: {e}")
-        matcher = lambda line: bool(pat.search(line))
+
+        def matcher(line):
+            return bool(pat.search(line))
     else:
         ql = query.lower()
-        matcher = lambda line: ql in line.lower()
+
+        def matcher(line):
+            return ql in line.lower()
 
     results: list[dict] = []
     for rel, path in iter_kb_files(subdir, root=root):
@@ -202,9 +222,7 @@ def search_kb(
                 ctx = "\n".join(lines[lo:hi])
                 if len(ctx) > 240:
                     ctx = ctx[:240] + "…"
-                results.append(
-                    {"path": rel, "line": i, "size_bytes": size, "context": ctx}
-                )
+                results.append({"path": rel, "line": i, "size_bytes": size, "context": ctx})
                 if len(results) >= max_results:
                     return results
     return results

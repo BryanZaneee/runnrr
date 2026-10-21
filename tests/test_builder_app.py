@@ -1,4 +1,5 @@
 """Agent Builder API tests — gating, ownership, caps, and write boundaries."""
+
 from __future__ import annotations
 
 import json
@@ -97,9 +98,7 @@ class TestSaveProfile:
             c.post("/api/builder/profile/shop", json=_valid_body(), headers=OWNER).status_code
             == 200
         )
-        r = c.post(
-            "/api/builder/profile/shop", json=_valid_body(label="New Name"), headers=OWNER
-        )
+        r = c.post("/api/builder/profile/shop", json=_valid_body(label="New Name"), headers=OWNER)
         assert r.status_code == 200
         cfg = json.loads((profiles_root / "shop" / "profile.json").read_text())
         assert cfg["label"] == "New Name"
@@ -125,9 +124,7 @@ class TestSaveProfile:
 
     def test_bad_accent_rejected(self, builder_client):
         c, _, _ = builder_client
-        r = c.post(
-            "/api/builder/profile/shop", json=_valid_body(accent="red"), headers=OWNER
-        )
+        r = c.post("/api/builder/profile/shop", json=_valid_body(accent="red"), headers=OWNER)
         assert r.status_code == 422
 
     def test_bundled_profile_protected(self, builder_client):
@@ -216,13 +213,9 @@ class TestOwnership:
             json={"path": "menu.md", "content": "x"},
             headers=OWNER,
         )
+        assert c.get("/api/builder/profile/shop", headers=OTHER_OWNER).status_code == 403
         assert (
-            c.get("/api/builder/profile/shop", headers=OTHER_OWNER).status_code == 403
-        )
-        assert (
-            c.post(
-                "/api/builder/profile/shop", json=_valid_body(), headers=OTHER_OWNER
-            ).status_code
+            c.post("/api/builder/profile/shop", json=_valid_body(), headers=OTHER_OWNER).status_code
             == 403
         )
         assert c.get("/api/builder/kb/shop", headers=OTHER_OWNER).status_code == 403
@@ -266,9 +259,7 @@ class TestOwnership:
             c.post("/api/builder/profile/legacy", json=_valid_body(), headers=OWNER).status_code
             == 200
         )
-        assert (
-            c.get("/api/builder/profile/legacy", headers=OTHER_OWNER).status_code == 403
-        )
+        assert c.get("/api/builder/profile/legacy", headers=OTHER_OWNER).status_code == 403
 
 
 class TestBuilderToolAllowlist:
@@ -277,9 +268,7 @@ class TestBuilderToolAllowlist:
     )
     def test_hidden_tools_rejected(self, builder_client, tool):
         c, _, profiles_root = builder_client
-        r = c.post(
-            "/api/builder/profile/shop", json=_valid_body(tools=[tool]), headers=OWNER
-        )
+        r = c.post("/api/builder/profile/shop", json=_valid_body(tools=[tool]), headers=OWNER)
         assert r.status_code == 400
         assert tool in r.json()["detail"]
         assert not (profiles_root / "shop").exists()
@@ -320,15 +309,13 @@ class TestBuilderLimits:
         c, _, _ = builder_client
         monkeypatch.setattr(config, "MAX_BUILDER_PROFILES", 1)
         assert (
-            c.post("/api/builder/profile/one", json=_valid_body(), headers=OWNER).status_code
-            == 200
+            c.post("/api/builder/profile/one", json=_valid_body(), headers=OWNER).status_code == 200
         )
         r = c.post("/api/builder/profile/two", json=_valid_body(), headers=OWNER)
         assert r.status_code == 503
         # Updating the existing one is still allowed.
         assert (
-            c.post("/api/builder/profile/one", json=_valid_body(), headers=OWNER).status_code
-            == 200
+            c.post("/api/builder/profile/one", json=_valid_body(), headers=OWNER).status_code == 200
         )
 
     def test_note_cap_blocks_new_but_not_overwrite(self, builder_client, monkeypatch):
@@ -448,9 +435,7 @@ class TestKbNotes:
     )
     def test_write_path_boundary(self, shop, path, tmp_path):
         c, _, profiles_root = shop
-        r = c.post(
-            "/api/builder/kb/shop/file", json={"path": path, "content": "x"}, headers=OWNER
-        )
+        r = c.post("/api/builder/kb/shop/file", json={"path": path, "content": "x"}, headers=OWNER)
         assert r.status_code == 400
         assert not (tmp_path / "evil.md").exists()
         assert not (profiles_root / "evil.md").exists()

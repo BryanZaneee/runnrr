@@ -2,7 +2,7 @@
 > `tenant_id` and PR #2 reference below: sessions and audit rows carry `user_id` (an
 > employee of the business) instead. `X-Admin-Token` / `ADMIN_TOKEN` are replaced by
 > Supabase `require_user` (see `supabase-auth.md`). Env names use the `RUNNRR_*` prefix and
-> `backend/` is `runnrr/`. Where this design and `docs/plans/runnrr-analysis.md` disagree,
+> `backend/` is `runnrr/`. Where this historical design and `docs/roadmap/README.md` disagree,
 > the analysis wins; the divergence is called out at the top of the file where it matters.
 
 > **Divergence:** the implemented design (P3a in `runnrr-analysis.md`) uses one shared `data/runnrr.sqlite3`, plain functions in `runnrr/store.py` (no `SessionStore` Protocol), an `epoch` column bumped on reset instead of a marker row, a frozen `system_prompt`/`tools_json` per session, FTS5 search, and a sessions API. The problem statement and acceptance below still apply.

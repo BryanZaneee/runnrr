@@ -4,6 +4,7 @@ Anything passed via `logger.info(msg, extra={...})` gets merged into the JSON
 record alongside `ts`, `level`, `logger`, `msg`. Built-in LogRecord attributes
 are filtered out.
 """
+
 from __future__ import annotations
 
 import json
@@ -12,10 +13,29 @@ import sys
 from datetime import datetime, timezone
 
 _RESERVED = {
-    "args", "asctime", "created", "exc_info", "exc_text", "filename",
-    "funcName", "levelname", "levelno", "lineno", "message", "module",
-    "msecs", "msg", "name", "pathname", "process", "processName",
-    "relativeCreated", "stack_info", "taskName", "thread", "threadName",
+    "args",
+    "asctime",
+    "created",
+    "exc_info",
+    "exc_text",
+    "filename",
+    "funcName",
+    "levelname",
+    "levelno",
+    "lineno",
+    "message",
+    "module",
+    "msecs",
+    "msg",
+    "name",
+    "pathname",
+    "process",
+    "processName",
+    "relativeCreated",
+    "stack_info",
+    "taskName",
+    "thread",
+    "threadName",
 }
 
 

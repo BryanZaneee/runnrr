@@ -1,4 +1,5 @@
 """Command line helpers for profile-scoped RAG indexes."""
+
 from __future__ import annotations
 
 import argparse

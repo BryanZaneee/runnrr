@@ -1,0 +1,24 @@
+[Unit]
+Description=Runnrr public workstation runtime
+After=network-online.target
+
+[Service]
+User=runnrr
+Group=runnrr
+WorkingDirectory=/opt/runnrr-workstation
+EnvironmentFile=/opt/easyagent/.env
+EnvironmentFile=/opt/runnrr-workstation/demo.env
+Environment=RUNNRR_KB_ROOT=/opt/runnrr-workstation/kb
+Environment=RUNNRR_PROFILE_ROOT=/opt/runnrr-workstation/profiles
+Environment=RUNNRR_PROJECT_DB=/opt/runnrr-workstation/data/projects.sqlite3
+Environment=ENABLE_PROFILE_EDITOR=0
+ExecStart=/opt/runnrr-workstation/.venv/bin/python -m uvicorn runnrr.app:app --host 127.0.0.1 --port 8002 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/runnrr-workstation/data
+
+[Install]
+WantedBy=multi-user.target

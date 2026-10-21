@@ -6,17 +6,16 @@ injected via the providers' `client=` kwarg, so no real API is called. Covers
 DeepSeek thinking mode, cache fields, SDK timeouts, and the Gemini streaming /
 message-mutation / tool-pairing contracts.
 """
+
 from __future__ import annotations
 
 import importlib
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from runnrr.providers.openai_compat_provider import OpenAICompatProvider, _norm_usage
-
 
 # --------------------------------------------------------------------------- #
 # Fake OpenAI streaming client — mirrors AsyncOpenAI.chat.completions.create()
@@ -130,9 +129,11 @@ class TestProviderTimeouts:
 class TestThinkingModeWiring:
     @pytest.mark.asyncio
     async def test_extra_body_and_reasoning_effort_passed_through(self):
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(text="hi"), finish_reason="stop")]),
-        ])
+        client = FakeOpenAIClient(
+            [
+                _chunk(choices=[_choice(delta=_delta(text="hi"), finish_reason="stop")]),
+            ]
+        )
         provider = OpenAICompatProvider(
             api_key_env="DEEPSEEK_API_KEY",
             base_url="https://api.deepseek.com",
@@ -151,9 +152,11 @@ class TestThinkingModeWiring:
     @pytest.mark.asyncio
     async def test_no_extra_fields_when_unconfigured(self):
         """OpenAI/Kimi/GPT-5 callers don't pass these kwargs; nothing should leak in."""
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(text="hi"), finish_reason="stop")]),
-        ])
+        client = FakeOpenAIClient(
+            [
+                _chunk(choices=[_choice(delta=_delta(text="hi"), finish_reason="stop")]),
+            ]
+        )
         provider = OpenAICompatProvider(api_key_env="OPENAI_API_KEY", client=client)
 
         await _drain(provider, [])
@@ -171,12 +174,14 @@ class TestThinkingModeWiring:
 class TestReasoningContentHandling:
     @pytest.mark.asyncio
     async def test_reasoning_streams_as_thinking_delta_not_text(self):
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(reasoning="thinking step 1"))]),
-            _chunk(choices=[_choice(delta=_delta(reasoning="thinking step 2"))]),
-            _chunk(choices=[_choice(delta=_delta(text="actual answer"))]),
-            _chunk(choices=[_choice(delta=_delta(), finish_reason="stop")]),
-        ])
+        client = FakeOpenAIClient(
+            [
+                _chunk(choices=[_choice(delta=_delta(reasoning="thinking step 1"))]),
+                _chunk(choices=[_choice(delta=_delta(reasoning="thinking step 2"))]),
+                _chunk(choices=[_choice(delta=_delta(text="actual answer"))]),
+                _chunk(choices=[_choice(delta=_delta(), finish_reason="stop")]),
+            ]
+        )
         provider = OpenAICompatProvider(
             api_key_env="DEEPSEEK_API_KEY",
             preserve_reasoning_content=True,
@@ -203,13 +208,25 @@ class TestReasoningContentHandling:
 
     @pytest.mark.asyncio
     async def test_reasoning_preserved_on_tool_call_turn(self):
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(reasoning="planning..."))]),
-            _chunk(choices=[_choice(delta=_delta(tool_calls=[
-                _tool_call(index=0, id_="call_a", name="list_kb", args='{"subdir":""}')
-            ]))]),
-            _chunk(choices=[_choice(delta=_delta(), finish_reason="tool_calls")]),
-        ])
+        client = FakeOpenAIClient(
+            [
+                _chunk(choices=[_choice(delta=_delta(reasoning="planning..."))]),
+                _chunk(
+                    choices=[
+                        _choice(
+                            delta=_delta(
+                                tool_calls=[
+                                    _tool_call(
+                                        index=0, id_="call_a", name="list_kb", args='{"subdir":""}'
+                                    )
+                                ]
+                            )
+                        )
+                    ]
+                ),
+                _chunk(choices=[_choice(delta=_delta(), finish_reason="tool_calls")]),
+            ]
+        )
         provider = OpenAICompatProvider(
             api_key_env="DEEPSEEK_API_KEY",
             preserve_reasoning_content=True,
@@ -227,13 +244,25 @@ class TestReasoningContentHandling:
     @pytest.mark.asyncio
     async def test_reasoning_dropped_when_flag_off(self):
         """Even if the model streams reasoning, no preservation when flag is off."""
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(reasoning="planning..."))]),
-            _chunk(choices=[_choice(delta=_delta(tool_calls=[
-                _tool_call(index=0, id_="call_b", name="list_kb", args='{"subdir":""}')
-            ]))]),
-            _chunk(choices=[_choice(delta=_delta(), finish_reason="tool_calls")]),
-        ])
+        client = FakeOpenAIClient(
+            [
+                _chunk(choices=[_choice(delta=_delta(reasoning="planning..."))]),
+                _chunk(
+                    choices=[
+                        _choice(
+                            delta=_delta(
+                                tool_calls=[
+                                    _tool_call(
+                                        index=0, id_="call_b", name="list_kb", args='{"subdir":""}'
+                                    )
+                                ]
+                            )
+                        )
+                    ]
+                ),
+                _chunk(choices=[_choice(delta=_delta(), finish_reason="tool_calls")]),
+            ]
+        )
         provider = OpenAICompatProvider(
             api_key_env="OPENAI_API_KEY",
             preserve_reasoning_content=False,
@@ -250,11 +279,13 @@ class TestReasoningContentHandling:
         """DeepSeek 400s the next request if reasoning_content is dropped from any
         thinking-mode turn — including plain-text turns. So preserve whenever it
         streamed, regardless of whether tool_calls are also present."""
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(reasoning="thinking..."))]),
-            _chunk(choices=[_choice(delta=_delta(text="plain answer"))]),
-            _chunk(choices=[_choice(delta=_delta(), finish_reason="stop")]),
-        ])
+        client = FakeOpenAIClient(
+            [
+                _chunk(choices=[_choice(delta=_delta(reasoning="thinking..."))]),
+                _chunk(choices=[_choice(delta=_delta(text="plain answer"))]),
+                _chunk(choices=[_choice(delta=_delta(), finish_reason="stop")]),
+            ]
+        )
         provider = OpenAICompatProvider(
             api_key_env="DEEPSEEK_API_KEY",
             preserve_reasoning_content=True,
@@ -273,10 +304,12 @@ class TestReasoningContentHandling:
     @pytest.mark.asyncio
     async def test_no_reasoning_field_when_no_reasoning_streamed(self):
         """If the model never emits reasoning_content, the field isn't synthesized."""
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(text="just an answer"))]),
-            _chunk(choices=[_choice(delta=_delta(), finish_reason="stop")]),
-        ])
+        client = FakeOpenAIClient(
+            [
+                _chunk(choices=[_choice(delta=_delta(text="just an answer"))]),
+                _chunk(choices=[_choice(delta=_delta(), finish_reason="stop")]),
+            ]
+        )
         provider = OpenAICompatProvider(
             api_key_env="DEEPSEEK_API_KEY",
             preserve_reasoning_content=True,
@@ -297,15 +330,33 @@ class TestReasoningContentHandling:
 class TestToolCallAccumulation:
     @pytest.mark.asyncio
     async def test_split_tool_call_arguments_reassemble(self):
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(tool_calls=[
-                _tool_call(index=0, id_="call_x", name="search_kb", args='{"que')
-            ]))]),
-            _chunk(choices=[_choice(delta=_delta(tool_calls=[
-                _tool_call(index=0, id_="", name="", args='ry":"foo"}')
-            ]))]),
-            _chunk(choices=[_choice(delta=_delta(), finish_reason="tool_calls")]),
-        ])
+        client = FakeOpenAIClient(
+            [
+                _chunk(
+                    choices=[
+                        _choice(
+                            delta=_delta(
+                                tool_calls=[
+                                    _tool_call(
+                                        index=0, id_="call_x", name="search_kb", args='{"que'
+                                    )
+                                ]
+                            )
+                        )
+                    ]
+                ),
+                _chunk(
+                    choices=[
+                        _choice(
+                            delta=_delta(
+                                tool_calls=[_tool_call(index=0, id_="", name="", args='ry":"foo"}')]
+                            )
+                        )
+                    ]
+                ),
+                _chunk(choices=[_choice(delta=_delta(), finish_reason="tool_calls")]),
+            ]
+        )
         provider = OpenAICompatProvider(api_key_env="OPENAI_API_KEY", client=client)
 
         events = await _drain(provider, [])
@@ -317,12 +368,27 @@ class TestToolCallAccumulation:
 
     @pytest.mark.asyncio
     async def test_malformed_arguments_yield_raw_sentinel(self):
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(tool_calls=[
-                _tool_call(index=0, id_="call_bad", name="search_kb", args='{"query": broke')
-            ]))]),
-            _chunk(choices=[_choice(delta=_delta(), finish_reason="tool_calls")]),
-        ])
+        client = FakeOpenAIClient(
+            [
+                _chunk(
+                    choices=[
+                        _choice(
+                            delta=_delta(
+                                tool_calls=[
+                                    _tool_call(
+                                        index=0,
+                                        id_="call_bad",
+                                        name="search_kb",
+                                        args='{"query": broke',
+                                    )
+                                ]
+                            )
+                        )
+                    ]
+                ),
+                _chunk(choices=[_choice(delta=_delta(), finish_reason="tool_calls")]),
+            ]
+        )
         provider = OpenAICompatProvider(api_key_env="OPENAI_API_KEY", client=client)
 
         events = await _drain(provider, [])
@@ -368,8 +434,10 @@ class TestDeepSeekModelSurface:
         monkeypatch.setenv("DEFAULT_MODEL", "deepseek-v4-flash")
 
         from runnrr import config
+
         importlib.reload(config)
         from runnrr import app as app_module
+
         importlib.reload(app_module)
         app_module.limiter.enabled = False
 
@@ -401,18 +469,14 @@ def _gemini_chunk(*, text=None, parts=None, usage=None, finish_reason=None):
                 content=SimpleNamespace(parts=parts or []),
                 # Real Gemini responses always carry a finish_reason; the provider
                 # reads it rather than inferring stop_reason from content.
-                finish_reason=(
-                    SimpleNamespace(name=finish_reason) if finish_reason else None
-                ),
+                finish_reason=(SimpleNamespace(name=finish_reason) if finish_reason else None),
             )
         ]
     return SimpleNamespace(text=text, candidates=candidates, usage_metadata=usage)
 
 
 def _gemini_fc_part(*, id_=None, name="", args=None):
-    return SimpleNamespace(
-        function_call=SimpleNamespace(id=id_, name=name, args=args or {})
-    )
+    return SimpleNamespace(function_call=SimpleNamespace(id=id_, name=name, args=args or {}))
 
 
 class FakeGeminiClient:
@@ -421,9 +485,7 @@ class FakeGeminiClient:
     def __init__(self, chunks):
         self._chunks = chunks
         self.last_request: dict | None = None
-        self.aio = SimpleNamespace(
-            models=SimpleNamespace(generate_content_stream=self._stream)
-        )
+        self.aio = SimpleNamespace(models=SimpleNamespace(generate_content_stream=self._stream))
 
     async def _stream(self, **kwargs):
         self.last_request = kwargs
@@ -455,10 +517,12 @@ class TestGeminiStreaming:
 
         from runnrr.providers.gemini_provider import GeminiProvider
 
-        client = FakeGeminiClient([
-            _gemini_chunk(text="Hello"),
-            _gemini_chunk(text=" there."),
-        ])
+        client = FakeGeminiClient(
+            [
+                _gemini_chunk(text="Hello"),
+                _gemini_chunk(text=" there."),
+            ]
+        )
         provider = GeminiProvider(client=client)
         messages = []
 
@@ -478,11 +542,15 @@ class TestGeminiStreaming:
     async def test_function_call_turn_pairs_and_falls_back_to_synthetic_id(self):
         from runnrr.providers.gemini_provider import GeminiProvider
 
-        client = FakeGeminiClient([
-            _gemini_chunk(parts=[
-                _gemini_fc_part(name="search_kb", args={"query": "boss weakness"}),
-            ]),
-        ])
+        client = FakeGeminiClient(
+            [
+                _gemini_chunk(
+                    parts=[
+                        _gemini_fc_part(name="search_kb", args={"query": "boss weakness"}),
+                    ]
+                ),
+            ]
+        )
         provider = GeminiProvider(client=client)
         messages = []
 
@@ -491,8 +559,11 @@ class TestGeminiStreaming:
         # append_tool_results call must produce a valid message log).
         events = []
         async for ev in provider.stream(
-            model="gemini-2.5-flash", messages=messages, system="sys",
-            tools=[], max_tokens=1024,
+            model="gemini-2.5-flash",
+            messages=messages,
+            system="sys",
+            tools=[],
+            max_tokens=1024,
         ):
             if ev["type"] == "tool_use_complete":
                 assert len(messages) == 1 and messages[0].role == "model"
@@ -514,12 +585,16 @@ class TestGeminiStreaming:
     async def test_tool_use_start_emitted_per_call(self):
         from runnrr.providers.gemini_provider import GeminiProvider
 
-        client = FakeGeminiClient([
-            _gemini_chunk(parts=[
-                _gemini_fc_part(id_="fc_1", name="search_kb", args={"query": "a"}),
-                _gemini_fc_part(id_="fc_2", name="search_kb", args={"query": "b"}),
-            ]),
-        ])
+        client = FakeGeminiClient(
+            [
+                _gemini_chunk(
+                    parts=[
+                        _gemini_fc_part(id_="fc_1", name="search_kb", args={"query": "a"}),
+                        _gemini_fc_part(id_="fc_2", name="search_kb", args={"query": "b"}),
+                    ]
+                ),
+            ]
+        )
         provider = GeminiProvider(client=client)
 
         events = await _drain_gemini(provider, [])
@@ -561,17 +636,19 @@ class TestGeminiStreaming:
     async def test_usage_maps_thinking_and_cache_fields(self):
         from runnrr.providers.gemini_provider import GeminiProvider
 
-        client = FakeGeminiClient([
-            _gemini_chunk(
-                text="ok",
-                usage=SimpleNamespace(
-                    prompt_token_count=100,
-                    candidates_token_count=20,
-                    thoughts_token_count=7,
-                    cached_content_token_count=30,
+        client = FakeGeminiClient(
+            [
+                _gemini_chunk(
+                    text="ok",
+                    usage=SimpleNamespace(
+                        prompt_token_count=100,
+                        candidates_token_count=20,
+                        thoughts_token_count=7,
+                        cached_content_token_count=30,
+                    ),
                 ),
-            ),
-        ])
+            ]
+        )
         provider = GeminiProvider(client=client)
 
         events = await _drain_gemini(provider, [])
@@ -580,7 +657,7 @@ class TestGeminiStreaming:
         assert len(usages) == 1
         assert usages[0]["usage"] == {
             "input_tokens": 100,
-            "output_tokens": 20,
+            "output_tokens": 27,
             "reasoning_tokens": 7,
             "cache_read_input_tokens": 30,
             "cache_creation_input_tokens": 0,
@@ -605,13 +682,13 @@ class TestUsageAlwaysEmitted:
     async def test_missing_usage_yields_estimated_event(self):
         from runnrr.providers.openai_compat_provider import OpenAICompatProvider
 
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(text="hello there"))]),
-            _chunk(choices=[_choice(finish_reason="stop")]),
-        ])
-        provider = OpenAICompatProvider(
-            api_key_env="X", stream_options=False, client=client
+        client = FakeOpenAIClient(
+            [
+                _chunk(choices=[_choice(delta=_delta(text="hello there"))]),
+                _chunk(choices=[_choice(finish_reason="stop")]),
+            ]
         )
+        provider = OpenAICompatProvider(api_key_env="X", stream_options=False, client=client)
 
         events = await _drain(provider, [{"role": "user", "content": "hi"}])
 
@@ -626,11 +703,13 @@ class TestUsageAlwaysEmitted:
     async def test_reported_usage_is_not_marked_estimated(self):
         from runnrr.providers.openai_compat_provider import OpenAICompatProvider
 
-        client = FakeOpenAIClient([
-            _chunk(choices=[_choice(delta=_delta(text="hi"))]),
-            _chunk(choices=[_choice(finish_reason="stop")]),
-            _chunk(usage=SimpleNamespace(prompt_tokens=7, completion_tokens=2)),
-        ])
+        client = FakeOpenAIClient(
+            [
+                _chunk(choices=[_choice(delta=_delta(text="hi"))]),
+                _chunk(choices=[_choice(finish_reason="stop")]),
+                _chunk(usage=SimpleNamespace(prompt_tokens=7, completion_tokens=2)),
+            ]
+        )
         provider = OpenAICompatProvider(api_key_env="X", client=client)
 
         events = await _drain(provider, [{"role": "user", "content": "hi"}])
@@ -638,3 +717,66 @@ class TestUsageAlwaysEmitted:
         u = [e for e in events if e["type"] == "usage"][0]["usage"]
         assert u.get("estimated") is not True
         assert u["input_tokens"] == 7
+
+
+@pytest.mark.parametrize(
+    "finish, expected", [("length", "max_tokens"), ("content_filter", "blocked")]
+)
+async def test_openai_incomplete_tool_call_is_not_executed(finish, expected):
+    client = FakeOpenAIClient(
+        [
+            _chunk(
+                choices=[
+                    _choice(
+                        delta=_delta(
+                            tool_calls=[_tool_call(id_="partial", name="read_file", args="{")]
+                        )
+                    )
+                ]
+            ),
+            _chunk(choices=[_choice(finish_reason=finish)]),
+        ]
+    )
+    provider = OpenAICompatProvider(api_key_env="DEEPSEEK_API_KEY", client=client)
+    messages = []
+    events = await _drain(provider, messages)
+    assert events[-1]["stop_reason"] == expected
+    assert not any(e["type"] == "tool_use_complete" for e in events)
+    assert "tool_calls" not in messages[-1]
+
+
+@pytest.mark.parametrize("finish", ["max_tokens", "refusal"])
+async def test_anthropic_incomplete_tool_calls_are_not_emitted(finish):
+    from runnrr.providers.anthropic_provider import AnthropicProvider
+
+    response = SimpleNamespace(
+        stop_reason=finish,
+        content=[SimpleNamespace(type="tool_use", id="partial", name="read_file", input={})],
+        usage=SimpleNamespace(input_tokens=10, output_tokens=5),
+    )
+
+    class Stream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def __aiter__(self):
+            if False:
+                yield
+
+        async def get_final_message(self):
+            return response
+
+    client = SimpleNamespace(messages=SimpleNamespace(stream=lambda **kw: Stream()))
+    provider = AnthropicProvider(client=client)
+    messages = []
+    events = [
+        ev
+        async for ev in provider.stream(
+            model="claude-sonnet-4-5", messages=messages, system="test", tools=[], max_tokens=100
+        )
+    ]
+    assert events[-1]["stop_reason"] == ("max_tokens" if finish == "max_tokens" else "blocked")
+    assert not any(ev["type"] == "tool_use_complete" for ev in events)

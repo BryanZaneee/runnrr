@@ -2,6 +2,7 @@
 
 Reads .env on import. KB_ROOT is the trust boundary for all KB tools.
 """
+
 from __future__ import annotations
 
 import os
@@ -21,6 +22,7 @@ DEFAULT_MODEL: str = os.environ.get("DEFAULT_MODEL", "claude-sonnet-4-5")
 # Global ceiling. Per-model limits come from MODEL_REGISTRY; this caps them all,
 # so raising a model's max_output_tokens alone will not blow up spend.
 MAX_TOKENS: int = int(os.environ.get("MAX_TOKENS", "4096"))
+MAX_REQUEST_TOKEN_RESERVATION: int = int(os.environ.get("RUNNRR_MAX_REQUEST_TOKENS", "0"))
 MAX_TOOL_HOPS: int = int(os.environ.get("MAX_TOOL_HOPS", "8"))
 # Tools in one hop run concurrently on worker threads. Bounded because the
 # default thread pool is process-wide -- an unbounded max-width hop would starve
@@ -39,17 +41,13 @@ MAX_ACTIVE_SESSIONS: int = int(os.environ.get("MAX_ACTIVE_SESSIONS", "200"))
 
 # Per-IP rate limit on POST /api/chat. slowapi syntax: "<count>/<period>" joined by ";".
 RATE_LIMIT_CHAT: str = os.environ.get("RATE_LIMIT_CHAT", "10/minute;100/hour")
-RATE_LIMIT_RAG_INSPECT: str = os.environ.get(
-    "RATE_LIMIT_RAG_INSPECT", "5/minute;30/hour"
-)
+RATE_LIMIT_RAG_INSPECT: str = os.environ.get("RATE_LIMIT_RAG_INSPECT", "5/minute;30/hour")
 RATE_LIMIT_ENABLED: bool = os.environ.get("RATE_LIMIT_ENABLED", "1") == "1"
 
 LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
 TOOL_DEBUG_ERRORS: bool = os.environ.get("RUNNRR_TOOL_DEBUG_ERRORS", "0") == "1"
 
-EMBEDDING_BACKEND: str = os.environ.get(
-    "RUNNRR_EMBEDDING_BACKEND", "voyage"
-).strip().lower()
+EMBEDDING_BACKEND: str = os.environ.get("RUNNRR_EMBEDDING_BACKEND", "voyage").strip().lower()
 EMBEDDING_MODEL: str = os.environ.get("RUNNRR_EMBEDDING_MODEL", "").strip()
 VOYAGE_API_KEY: str = os.environ.get("VOYAGE_API_KEY", "").strip()
 # Voyage free tier (no payment method) is ~3 req/min; use 8–16. Paid/default: 96.

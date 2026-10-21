@@ -7,14 +7,16 @@ persistence) — and composed here behind the RAGEvaluator orchestration class.
 RunResult, EvalCaseSkipped, and VARIANT_TOOLS are re-exported for callers that
 imported them from this module.
 """
+
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any, Callable
 
 from runnrr import config
 from runnrr.evals.datasets import RagDataset
-from runnrr.evals.e2e import VARIANT_TOOLS, end_to_end_record
+from runnrr.evals.e2e import VARIANT_TOOLS, async_end_to_end_record
 from runnrr.evals.records import RunResult, finalize
 from runnrr.evals.retrieval import EvalCaseSkipped, retrieval_record
 from runnrr.profiles import AgentProfile
@@ -88,22 +90,26 @@ class RAGEvaluator:
             raise KeyError(f"unknown model_id: {model_id}")
         model_cfg = config.MODEL_REGISTRY[model_id]
         records: list[dict] = []
-        for case in dataset.cases:
-            records.append(
-                end_to_end_record(
-                    self.profile,
-                    case,
-                    variant,
-                    model_id,
-                    model_cfg,
-                    embedding=self.embedding,
-                    index_dir=self.index_dir,
-                    grader_model_id=self.grader_model_id,
-                    rerank_fn=self._rerank_fn,
-                    grade_fn=self.grade_fn,
-                    provider_factory=self.provider_factory,
+
+        async def collect():
+            for case in dataset.cases:
+                records.append(
+                    await async_end_to_end_record(
+                        self.profile,
+                        case,
+                        variant,
+                        model_id,
+                        model_cfg,
+                        embedding=self.embedding,
+                        index_dir=self.index_dir,
+                        grader_model_id=self.grader_model_id,
+                        rerank_fn=self._rerank_fn,
+                        grade_fn=self.grade_fn,
+                        provider_factory=self.provider_factory,
+                    )
                 )
-            )
+
+        asyncio.run(collect())
         return finalize(
             records,
             profile=self.profile,

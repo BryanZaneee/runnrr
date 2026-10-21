@@ -1,4 +1,5 @@
 """Shared tool schemas derived from the native tool registry."""
+
 from __future__ import annotations
 
 from copy import deepcopy

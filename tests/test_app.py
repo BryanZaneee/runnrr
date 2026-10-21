@@ -3,6 +3,7 @@
 Hits /api/health, /api/models, and /api/chat. Verifies the SSE stream is well-formed
 when the provider is replaced with a FakeProvider that yields canned events.
 """
+
 from __future__ import annotations
 
 import json
@@ -14,6 +15,47 @@ import pytest
 from runnrr.profiles import AgentProfile
 
 MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
+
+
+@pytest.mark.asyncio
+async def test_chat_rejects_overlapping_turns_and_releases_on_disconnect(
+    client,
+    monkeypatch,
+    fake_provider_cls,
+):
+    from fastapi import HTTPException, Request
+
+    _, app_module = client
+    provider = fake_provider_cls([[{"type": "message_done", "stop_reason": "end_turn"}]])
+    monkeypatch.setattr(app_module, "get_provider", lambda _: provider)
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/chat",
+            "headers": [],
+            "client": ("127.0.0.1", 1234),
+            "app": app_module.app,
+        }
+    )
+    req = app_module.ChatRequest(session_id="overlap", message="Hello", model="claude-sonnet-4-5")
+    response = await app_module.chat(request=request, req=req)
+    with pytest.raises(HTTPException) as error:
+        await app_module.chat(request=request, req=req)
+    assert error.value.status_code == 409
+
+    session = app_module.SESSIONS["overlap"]
+    session["last_seen"] = 0
+    app_module._cleanup_stale_sessions()
+    assert app_module.SESSIONS["overlap"] is session
+    await anext(response.body_iterator)
+    await response.body_iterator.aclose()
+    assert not session["busy"]
+    assert session["last_seen"] > 0
+
+    response = await app_module.chat(request=request, req=req)
+    assert [frame async for frame in response.body_iterator]
+    assert not session["busy"]
 
 
 # --------------------------------------------------------------------------- #
@@ -94,9 +136,7 @@ class TestProfiles:
         from runnrr.profiles import ProfileConfigError
 
         def boom(profile_id):
-            raise ProfileConfigError(
-                f"profile '{profile_id}' lists unknown tool(s): serch_kb."
-            )
+            raise ProfileConfigError(f"profile '{profile_id}' lists unknown tool(s): serch_kb.")
 
         c, _ = client
         monkeypatch.setattr(app_module, "load_profile", boom)
@@ -212,10 +252,15 @@ class TestChat:
                 [
                     {"type": "text_delta", "text": "Hello"},
                     {"type": "text_delta", "text": " there."},
-                    {"type": "usage", "usage": {
-                        "input_tokens": 10, "output_tokens": 3,
-                        "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0,
-                    }},
+                    {
+                        "type": "usage",
+                        "usage": {
+                            "input_tokens": 10,
+                            "output_tokens": 3,
+                            "cache_read_input_tokens": 0,
+                            "cache_creation_input_tokens": 0,
+                        },
+                    },
                     {"type": "message_done", "stop_reason": "end_turn"},
                 ]
             ]
@@ -239,16 +284,18 @@ class TestChat:
         assert "event: usage" in kinds
         assert kinds[-1] == "event: done"
 
-    def test_streams_sanitized_tool_sources(
-        self, client, monkeypatch, kb_root, fake_provider_cls
-    ):
+    def test_streams_sanitized_tool_sources(self, client, monkeypatch, kb_root, fake_provider_cls):
         c, app_module = client
 
         fake = fake_provider_cls(
             [
                 [
-                    {"type": "tool_use_complete", "tool_use_id": "tu_read",
-                     "name": "read_file", "arguments": {"path": "resume/resume.md"}},
+                    {
+                        "type": "tool_use_complete",
+                        "tool_use_id": "tu_read",
+                        "name": "read_file",
+                        "arguments": {"path": "resume/resume.md"},
+                    },
                     {"type": "message_done", "stop_reason": "tool_use"},
                 ],
                 [
@@ -355,9 +402,7 @@ class TestChat:
             body = b"".join(r.iter_bytes()).decode("utf-8")
 
         events = parse_sse(body)
-        tool_payloads = [
-            payload for event, payload in events if event == "tool_result"
-        ]
+        tool_payloads = [payload for event, payload in events if event == "tool_result"]
         assert tool_payloads
         assert tool_payloads[0]["name"] == "semantic_search_kb"
         assert tool_payloads[0]["is_error"] is False
@@ -380,9 +425,7 @@ class TestChat:
         for entry in trace["entries"]:
             assert set(entry.keys()) == trace_keys
             assert isinstance(entry["tokens"], int)
-        assert trace["retrieved_tokens"] == sum(
-            e["tokens"] for e in trace["entries"]
-        )
+        assert trace["retrieved_tokens"] == sum(e["tokens"] for e in trace["entries"])
         assert trace["kb_tokens"] >= trace["retrieved_tokens"]
         trace_blob = json.dumps(trace)
         assert "projects/" not in trace_blob
@@ -413,7 +456,9 @@ class TestChat:
         assert len(sess["messages"]) == 2
         assert sess["messages"][0]["role"] == "user"
 
-    def test_session_resets_when_profile_changes(self, client, monkeypatch, tmp_path, fake_provider_cls):
+    def test_session_resets_when_profile_changes(
+        self, client, monkeypatch, tmp_path, fake_provider_cls
+    ):
         c, app_module = client
 
         fake = fake_provider_cls(
@@ -565,7 +610,7 @@ class TestRagInspect:
         profile, index_root = self._build_mini_rag(monkeypatch, tmp_path)
         monkeypatch.setattr(app_module, "get_profile", lambda profile_id="mini": profile)
 
-        (index_root / profile.id / "pca.json").unlink()
+        (index_root / profile.id / "current" / "pca.json").unlink()
 
         r = c.post(
             "/api/rag/inspect",
@@ -605,3 +650,40 @@ class TestRagInspect:
         )
         assert r.status_code == 503
         assert "not built" in r.json()["detail"].lower()
+
+
+def test_session_cap_counts_user_turns_not_tool_messages(client, monkeypatch, fake_provider_cls):
+    c, module = client
+    monkeypatch.setattr(
+        module,
+        "get_provider",
+        lambda _: fake_provider_cls([[{"type": "message_done", "stop_reason": "end_turn"}]]),
+    )
+    monkeypatch.setattr(module, "MAX_TURNS_PER_SESSION", 2)
+    request = {"session_id": "turn-cap", "message": "Hello", "model": "claude-sonnet-4-5"}
+    assert c.post("/api/chat", json=request).status_code == 200
+    module.SESSIONS["turn-cap"]["messages"].extend([{"role": "tool", "content": "ok"}] * 10)
+    assert c.post("/api/chat", json=request).status_code == 200
+    assert c.post("/api/chat", json=request).status_code == 429
+
+
+def test_same_provider_model_change_resets_context(client, monkeypatch, fake_provider_cls):
+    c, module = client
+    monkeypatch.setattr(
+        module,
+        "get_provider",
+        lambda _: fake_provider_cls([[{"type": "message_done", "stop_reason": "end_turn"}]]),
+    )
+    first = "claude-sonnet-4-5"
+    second = next(
+        mid
+        for mid, cfg in module.MODEL_REGISTRY.items()
+        if cfg["provider"] == module.MODEL_REGISTRY[first]["provider"] and mid != first
+    )
+    request = {"session_id": "model-binding", "message": "Hello", "model": first}
+    assert c.post("/api/chat", json=request).status_code == 200
+    assert c.post("/api/chat", json=request | {"model": second}).status_code == 200
+    session = module.SESSIONS["model-binding"]
+    assert session["model"] == second
+    assert session["turns"] == 1
+    assert len(session["messages"]) == 2

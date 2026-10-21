@@ -5,6 +5,7 @@ Deliberately narrow: only the names other packages import from
 the registry, source-metadata builders -- is imported from its owning
 submodule (``runnrr.tools.registry``, ``runnrr.tools.sales``, ...).
 """
+
 from __future__ import annotations
 
 from runnrr.tools.dispatch import run_tool

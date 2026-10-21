@@ -22,6 +22,7 @@ gemini-2.5-pro, gemini-2.5-flash. Add them as their rates are confirmed — the
 `test_unpriced_model_returns_none` test guards the null-not-zero contract while
 the table fills in.
 """
+
 from __future__ import annotations
 
 from typing import Mapping, TypedDict
@@ -64,6 +65,12 @@ def cost_usd(model_id: str, usage: Mapping[str, int]) -> float | None:
     with `cache_read` and `cache_write` as subsets of it, so the uncached
     remainder is what bills at the full input rate.
     """
+    breakdown = cost_breakdown(model_id, usage)
+    return None if breakdown is None else round(sum(breakdown.values()), 8)
+
+
+def cost_breakdown(model_id: str, usage: Mapping[str, int]) -> dict[str, float] | None:
+    """Estimated USD by disjoint category, using the same rates as cost_usd."""
     price = PRICING.get(model_id)
     if price is None:
         return None
@@ -71,12 +78,21 @@ def cost_usd(model_id: str, usage: Mapping[str, int]) -> float | None:
     cache_read = int(usage.get("cache_read") or 0)
     cache_write = int(usage.get("cache_write") or 0)
     fresh_input = max(0, int(usage.get("input") or 0) - cache_read - cache_write)
-    output = int(usage.get("output") or 0) + int(usage.get("reasoning") or 0)
+    output = int(usage.get("output") or 0)
 
-    total = (
-        fresh_input * price["input"]
-        + cache_read * price["cache_read"]
-        + cache_write * price["cache_write"]
-        + output * price["output"]
+    return {
+        "input": fresh_input * price["input"] / 1_000_000,
+        "cache_read": cache_read * price["cache_read"] / 1_000_000,
+        "cache_write": cache_write * price["cache_write"] / 1_000_000,
+        "output": output * price["output"] / 1_000_000,
+    }
+
+
+def cache_savings_usd(model_id: str, usage: Mapping[str, int]) -> float | None:
+    """Gross cache-read savings versus uncached input; excludes write premiums."""
+    price = PRICING.get(model_id)
+    if price is None:
+        return None
+    return round(
+        int(usage.get("cache_read") or 0) * (price["input"] - price["cache_read"]) / 1_000_000, 8
     )
-    return round(total / 1_000_000, 8)

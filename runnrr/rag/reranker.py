@@ -1,4 +1,5 @@
 """Optional LLM reranking over hybrid RRF retrieval candidates."""
+
 from __future__ import annotations
 
 import logging
@@ -66,8 +67,7 @@ def _build_prompt(query: str, candidates: list[RetrievalResult]) -> str:
         if len(snippet) > _SNIPPET_CHARS:
             snippet = snippet[: _SNIPPET_CHARS - 3].rstrip() + "..."
         lines.append(
-            f"{i}. chunk_id={result.chunk.chunk_id!r} path={result.chunk.path!r}\n"
-            f"   {snippet}"
+            f"{i}. chunk_id={result.chunk.chunk_id!r} path={result.chunk.path!r}\n   {snippet}"
         )
     lines.append(
         "\nRespond with a JSON array only, one object per candidate you judged, "

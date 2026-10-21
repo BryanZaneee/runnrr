@@ -3,15 +3,16 @@
 Optional embedding backends are imported only when their provider is
 constructed, so core Runnrr imports stay lightweight.
 """
-from __future__ import annotations
 
-from runnrr.budget import reserve_paid_call
+from __future__ import annotations
 
 import hashlib
 import math
 import re
 import time
 from typing import Protocol
+
+from runnrr.budget import reserve_paid_call
 
 
 class EmbeddingProviderError(RuntimeError):
@@ -118,13 +119,8 @@ class VoyageEmbeddingProvider:
         for attempt in range(6):
             try:
                 reserve_paid_call(f"embed:{self.model}")
-                response = self._client.embed(
-                    texts, model=self.model, input_type=input_type
-                )
-                return [
-                    [float(value) for value in embedding]
-                    for embedding in response.embeddings
-                ]
+                response = self._client.embed(texts, model=self.model, input_type=input_type)
+                return [[float(value) for value in embedding] for embedding in response.embeddings]
             except RateLimitError:
                 if attempt >= 5:
                     raise

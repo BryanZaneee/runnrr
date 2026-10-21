@@ -7,6 +7,7 @@ Free tier covers 1000 searches/month — enough for a personal-site agent.
 Provider-agnostic by design: the result is a plain dict shaped for any model to
 read, so Personal Agent can use it whether it's running on DeepSeek, Claude, GPT, etc.
 """
+
 from __future__ import annotations
 
 import os

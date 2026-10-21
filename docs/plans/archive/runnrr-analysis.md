@@ -1,3 +1,5 @@
+> Historical plan. Current priorities and implementation status live in [the roadmap](../../roadmap/README.md). Do not use this document as a deletion checklist.
+
 # Runnrr: analysis, corrections, and the PR sequence
 
 > September 22 update: the repository relocation is complete and the supplied

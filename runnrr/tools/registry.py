@@ -1,4 +1,5 @@
 """Native tool registry assembled from domain-owned tool definitions."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -8,6 +9,7 @@ from runnrr.tools.calculator import CALCULATOR_TOOL
 from runnrr.tools.definitions import ToolContext, ToolDef, ToolHandler
 from runnrr.tools.kb import KB_TOOL_DEFS
 from runnrr.tools.personal_kb import PERSONAL_KB_TOOL_DEFS
+from runnrr.tools.project_knowledge import PROJECT_TOOL_DEFS
 from runnrr.tools.sales import SALES_TOOL_DEFS
 from runnrr.tools.skills_tool import READ_SKILL_TOOL
 from runnrr.tools.source_metadata import default_metadata, unavailable_metadata
@@ -22,6 +24,7 @@ SEMANTIC_SEARCH_TOOL: ToolDef = build_semantic_search_tool()
 TOOL_DEFS: tuple[ToolDef, ...] = (
     *KB_TOOL_DEFS,
     *PERSONAL_KB_TOOL_DEFS,
+    *PROJECT_TOOL_DEFS,
     SEMANTIC_SEARCH_TOOL,
     WEB_SEARCH_TOOL,
     FETCH_URL_TEXT_TOOL,

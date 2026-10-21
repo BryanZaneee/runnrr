@@ -1,11 +1,11 @@
 """Eval API endpoint tests — gated by ENABLE_EVALS_API."""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 
 def _write_eval_profile_tree(

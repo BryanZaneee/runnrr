@@ -1,4 +1,5 @@
 """End-to-end evaluation: run a full agent turn per case and grade the answer."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,6 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 
+from runnrr import config
 from runnrr.agent import run_conversation_stream
 from runnrr.evals.datasets import RagCase
 from runnrr.evals.graders import (
@@ -16,11 +18,10 @@ from runnrr.evals.graders import (
     grade_recall_at_k,
 )
 from runnrr.evals.records import build_record
-from runnrr.usage import tally, zero_tokens
 from runnrr.evals.retrieval import EvalCaseSkipped, retrieve
 from runnrr.profiles import AgentProfile
-from runnrr.providers.registry import build_provider
-from runnrr import config
+from runnrr.providers.registry import _construct_provider
+from runnrr.usage import tally, zero_tokens
 
 VARIANT_TOOLS: dict[str, tuple[str, ...]] = {
     "keyword": ("search_kb", "read_file"),
@@ -54,7 +55,7 @@ async def _collect(agen: Any) -> list[dict]:
     return out
 
 
-def end_to_end_record(
+async def async_end_to_end_record(
     profile: AgentProfile,
     case: RagCase,
     variant: str,
@@ -69,9 +70,7 @@ def end_to_end_record(
     provider_factory: Callable[[str], Any] | None,
 ) -> dict:
     variant_profile = replace(profile, tools=VARIANT_TOOLS[variant])
-    factory = provider_factory or (
-        lambda mid: build_provider(mid, config.MODEL_REGISTRY[mid])
-    )
+    factory = provider_factory or (lambda mid: _construct_provider(config.MODEL_REGISTRY[mid]))
     provider = factory(model_id)
     session: dict = {
         "messages": [],
@@ -81,8 +80,8 @@ def end_to_end_record(
     }
 
     t0 = time.perf_counter()
-    events = asyncio.run(
-        _collect(
+    try:
+        events = await _collect(
             run_conversation_stream(
                 case.query,
                 session,
@@ -91,10 +90,43 @@ def end_to_end_record(
                 variant_profile,
             )
         )
-    )
+    finally:
+        if provider_factory is None:
+            client = provider.client
+            if model_cfg["provider"] == "gemini":
+                await client.aio.aclose()
+                client.close()
+            else:
+                await client.close()
     latency_ms = (time.perf_counter() - t0) * 1000.0
 
     answer, tool_calls, tokens = _reduce_events(events)
+
+    done = next((ev for ev in reversed(events) if ev.get("event") == "done"), None)
+    if (
+        any(ev.get("event") == "error" for ev in events)
+        or not done
+        or done.get("stop_reason", "end_turn") != "end_turn"
+    ):
+        return build_record(
+            profile,
+            run_id="",
+            mode="end-to-end",
+            variant=variant,
+            case=case,
+            paths=[],
+            chunk_ids=[],
+            retrieved=[],
+            metrics={},
+            grader_reasoning={},
+            answer=answer,
+            tool_calls=tool_calls,
+            latency_ms=latency_ms,
+            tokens=tokens,
+            status="error",
+            k=5,
+            skip_reason="agent did not complete successfully",
+        )
 
     if variant == "closed_book":
         paths, chunk_ids, retrieved = [], [], []
@@ -115,9 +147,7 @@ def end_to_end_record(
         except EvalCaseSkipped:
             paths, chunk_ids, retrieved = [], [], []
         context = "\n\n".join(r.get("snippet", "") for r in retrieved)
-        recall = grade_recall_at_k(
-            paths, list(case.expected_chunk_paths), k=5
-        ).score
+        recall = grade_recall_at_k(paths, list(case.expected_chunk_paths), k=5).score
 
     grader_reasoning: dict[str, str] = {}
     faith = grade_faithfulness(answer, context, grade_fn=grade_fn)
@@ -136,9 +166,7 @@ def end_to_end_record(
     grader_reasoning["answer_relevance"] = rel.reasoning
 
     if case.ground_truth_answer.strip():
-        gt = grade_answer_vs_ground_truth(
-            answer, case.ground_truth_answer, grade_fn=grade_fn
-        )
+        gt = grade_answer_vs_ground_truth(answer, case.ground_truth_answer, grade_fn=grade_fn)
         metrics["answer_vs_ground_truth"] = gt.score
         grader_reasoning["answer_vs_ground_truth"] = gt.reasoning
     else:
@@ -163,3 +191,8 @@ def end_to_end_record(
         k=5,
         skip_reason=None,
     )
+
+
+def end_to_end_record(*args, **kwargs) -> dict:
+    """Synchronous single-case entry point with an isolated provider client."""
+    return asyncio.run(async_end_to_end_record(*args, **kwargs))

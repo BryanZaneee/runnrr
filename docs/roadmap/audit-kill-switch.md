@@ -2,7 +2,7 @@
 > `tenant_id` and PR #2 reference below: sessions and audit rows carry `user_id` (an
 > employee of the business) instead. `X-Admin-Token` / `ADMIN_TOKEN` are replaced by
 > Supabase `require_user` (see `supabase-auth.md`). Env names use the `RUNNRR_*` prefix and
-> `backend/` is `runnrr/`. Where this design and `docs/plans/runnrr-analysis.md` disagree,
+> `backend/` is `runnrr/`. Where this historical design and `docs/roadmap/README.md` disagree,
 > the analysis wins; the divergence is called out at the top of the file where it matters.
 
 > **Divergence:** audit rows live in the shared SQLite file (P3c), not a JSONL stream; `disabled` is an `agent_flags` table, not `disabled.json`.

@@ -17,9 +17,8 @@ The contract
     Anthropic is the outlier and is normalized to match in its provider.
 
 ``reasoning_tokens``
-    DISJOINT from ``output_tokens``. Anthropic and OpenAI subtract it out
-    because their APIs roll it into output; Gemini's ``thoughts_token_count`` is
-    already separate from ``candidates_token_count``, so it is left alone.
+    A SUBSET of ``output_tokens``. Anthropic and OpenAI already include it;
+    Gemini thoughts are added to candidates to normalize to inclusive output.
 
 ``reasoning_estimated``
     True when ``reasoning_tokens`` was inferred rather than measured. Only
@@ -28,9 +27,10 @@ The contract
 
 Billing
 -------
-A turn costs ``input + output + reasoning``. Cache fields are excluded from the
-total precisely because they are subsets of input; adding them double-counts.
+Usage contract version 2: a turn costs ``input + output``. Cache and reasoning
+fields are subsets; adding them to the total would double-count.
 """
+
 from __future__ import annotations
 
 from typing import Mapping
@@ -59,8 +59,4 @@ def tally(acc: dict[str, int], usage: Mapping) -> dict[str, int]:
 
 def billable_total(acc: Mapping[str, int]) -> int:
     """Tokens charged against the budget. Cache fields are subsets of input."""
-    return (
-        int(acc.get("input") or 0)
-        + int(acc.get("output") or 0)
-        + int(acc.get("reasoning") or 0)
-    )
+    return int(acc.get("input") or 0) + int(acc.get("output") or 0)

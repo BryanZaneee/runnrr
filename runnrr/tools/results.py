@@ -1,4 +1,5 @@
 """Normalized tool result envelope."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -6,6 +7,7 @@ from typing import Any
 
 from runnrr.tools.definitions import ToolContext
 from runnrr.tools.registry import metadata_for_tool
+
 
 @dataclass
 class ToolResult:

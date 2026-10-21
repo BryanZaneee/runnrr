@@ -6,6 +6,7 @@ BM25 scores into a monotonically-decreasing "distance" so smaller values are
 better, which lets the hybrid Retriever fuse BM25 with vector cosine-distance
 scores without sign juggling.
 """
+
 from __future__ import annotations
 
 import math
@@ -29,7 +30,7 @@ class BM25Index:
         tokenizer: Callable[[str], list[str]] | None = None,
     ):
         self.chunks: list[Chunk] = []
-        self._corpus_tokens: list[list[str]] = []
+        self._term_counts: list[Counter[str]] = []
         self._doc_len: list[int] = []
         self._doc_freqs: dict[str, int] = {}
         self._avg_doc_len: float = 0.0
@@ -53,7 +54,7 @@ class BM25Index:
         self._index_built = False
 
     def _record_tokens(self, tokens: list[str]) -> None:
-        self._corpus_tokens.append(tokens)
+        self._term_counts.append(Counter(tokens))
         self._doc_len.append(len(tokens))
         seen: set[str] = set()
         for tok in tokens:
@@ -62,7 +63,7 @@ class BM25Index:
                 seen.add(tok)
 
     def _rebuild_token_stats(self) -> None:
-        self._corpus_tokens = []
+        self._term_counts = []
         self._doc_len = []
         self._doc_freqs = {}
         for chunk in self.chunks:
@@ -93,7 +94,7 @@ class BM25Index:
 
     def _score(self, query_tokens: list[str], doc_index: int) -> float:
         score = 0.0
-        counts = Counter(self._corpus_tokens[doc_index])
+        counts = self._term_counts[doc_index]
         doc_len = self._doc_len[doc_index]
         for tok in query_tokens:
             idf = self._idf.get(tok)
@@ -101,9 +102,7 @@ class BM25Index:
                 continue
             tf = counts.get(tok, 0)
             num = idf * tf * (self.k1 + 1)
-            den = tf + self.k1 * (
-                1 - self.b + self.b * (doc_len / self._avg_doc_len)
-            )
+            den = tf + self.k1 * (1 - self.b + self.b * (doc_len / self._avg_doc_len))
             score += num / (den + 1e-9)
         return score
 

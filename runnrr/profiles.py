@@ -9,6 +9,7 @@ The `mcp_servers` field on a profile is parsed and stored, but no MCP client is
 wired up yet — that integration is a follow-up task. See runnrr/agent.py for
 the planned shape.
 """
+
 from __future__ import annotations
 
 import json
@@ -40,14 +41,6 @@ MANIFEST_MAX_TOP_LEVEL_FILES = 40
 
 class ProfileConfigError(ValueError):
     """Raised when a profile's configuration is invalid (e.g. unknown tool names)."""
-
-
-def _category_filenames(kb_root: Path, category: str) -> list[str]:
-    """Return deduped, sorted basenames (no extension) of markdown files under a category."""
-    seen: set[str] = set()
-    for rel_path, _path in iter_kb_files(category, root=kb_root, pattern="*.md"):
-        seen.add(Path(rel_path).stem)
-    return sorted(seen, key=str.lower)
 
 
 def _format_filenames(names: list[str], cap: int) -> str:
@@ -97,32 +90,24 @@ def _compute_kb_manifest(kb_root: Path) -> str:
     if not kb_root.exists() or not kb_root.is_dir():
         return ""
 
-    markdown_files = list(iter_kb_files(root=kb_root, pattern="*.md"))
-    top_files = sorted(
-        (Path(rel_path).stem
-        for rel_path, _path in markdown_files
-        if len(Path(rel_path).parts) == 1),
-        key=str.lower,
-    )
-    subdirs = sorted(
-        {
-            Path(rel_path).parts[0]
-            for rel_path, _path in markdown_files
-            if len(Path(rel_path).parts) > 1
-        },
-        key=str.lower,
-    )
+    top_files: list[str] = []
+    categories: dict[str, set[str]] = {}
+    for rel_path, _path in iter_kb_files(root=kb_root, pattern="*.md"):
+        path = Path(rel_path)
+        if len(path.parts) == 1:
+            top_files.append(path.stem)
+        else:
+            categories.setdefault(path.parts[0], set()).add(path.stem)
 
     lines: list[str] = []
     if top_files:
-        lines.append("Top-level: " + _format_filenames(top_files, MANIFEST_MAX_TOP_LEVEL_FILES))
-    for category in subdirs:
-        files = _category_filenames(kb_root, category)
-        if not files:
-            continue
         lines.append(
-            f"{category}/: " + _format_filenames(files, MANIFEST_MAX_FILES_PER_CATEGORY)
+            "Top-level: "
+            + _format_filenames(sorted(top_files, key=str.lower), MANIFEST_MAX_TOP_LEVEL_FILES)
         )
+    for category in sorted(categories, key=str.lower):
+        files = sorted(categories[category], key=str.lower)
+        lines.append(f"{category}/: " + _format_filenames(files, MANIFEST_MAX_FILES_PER_CATEGORY))
 
     if not lines:
         return ""
@@ -154,6 +139,10 @@ class AgentProfile:
     # True for visitor-created profiles written by the builder API. These are
     # excluded from the public /api/profiles listing (unlisted, not secret).
     builder: bool = False
+    # Request-scoped project documents, never loaded from profile JSON.
+    project_documents: dict[str, str] = field(default_factory=dict)
+    project_name: str = ""
+    project_url: str = ""
 
 
 def _project_path(value: str | None, fallback: Path) -> Path:
@@ -198,6 +187,8 @@ def load_profile(
     pid = profile_id or DEFAULT_PROFILE
     root = (profile_root or PROFILE_ROOT).resolve()
     profile_dir = (root / pid).resolve()
+    if profile_dir.parent != root:
+        raise ProfileConfigError("profile must be a direct child of the profiles directory")
     cfg_path = profile_dir / "profile.json"
 
     if not cfg_path.exists():
@@ -223,9 +214,7 @@ def load_profile(
     if catalog:
         system_prompt = catalog + "\n\n" + system_prompt
     data_root = (
-        _project_path(cfg.get("data_root"), profile_dir / "data")
-        if cfg.get("data_root")
-        else None
+        _project_path(cfg.get("data_root"), profile_dir / "data") if cfg.get("data_root") else None
     )
 
     tools = tuple(cfg.get("tools", DEFAULT_PROFILE_TOOLS))
@@ -246,12 +235,10 @@ def load_profile(
         mcp_servers=tuple(cfg.get("mcp_servers", ())),
         skills_root=skills_root,
         project_aliases={
-            str(k).lower(): str(v)
-            for k, v in dict(cfg.get("project_aliases", {})).items()
+            str(k).lower(): str(v) for k, v in dict(cfg.get("project_aliases", {})).items()
         },
         source_labels={
-            str(k).lower(): str(v)
-            for k, v in dict(cfg.get("source_labels", {})).items()
+            str(k).lower(): str(v) for k, v in dict(cfg.get("source_labels", {})).items()
         },
         source_path_labels=tuple(
             (str(pair[0]), str(pair[1]))

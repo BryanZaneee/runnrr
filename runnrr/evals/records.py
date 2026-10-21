@@ -3,9 +3,8 @@
 Base layer of the eval harness: no imports from other runnrr.evals modules, so
 runnrr.evals.retrieval and runnrr.evals.e2e can depend on it without cycles.
 """
-from __future__ import annotations
 
-from runnrr.usage import zero_tokens as _zero_tokens
+from __future__ import annotations
 
 import json
 from dataclasses import dataclass
@@ -17,6 +16,8 @@ from runnrr.evals.datasets import RagCase
 from runnrr.profiles import AgentProfile
 from runnrr.rag.embeddings import EmbeddingProvider
 from runnrr.rag.indexer import Indexer
+from runnrr.usage import billable_total
+from runnrr.usage import zero_tokens as _zero_tokens
 
 
 @dataclass
@@ -66,14 +67,9 @@ def _failure_label(
     expected: tuple[str, ...],
     skip_reason: str | None = None,
 ) -> str | None:
-    if status == "skipped" and skip_reason:
+    if status in {"skipped", "error"} and skip_reason:
         return skip_reason
-    if (
-        status == "ok"
-        and recall is not None
-        and recall == 0.0
-        and expected
-    ):
+    if status == "ok" and recall is not None and recall == 0.0 and expected:
         return "missed_expected_chunk"
     return None
 
@@ -101,6 +97,7 @@ def build_record(
     recall = recall_metric(metrics)
     return {
         "schema": 1,
+        "usage_version": 2,
         "run_id": run_id,
         "profile_id": profile.id,
         "mode": mode,
@@ -182,9 +179,7 @@ def build_summary(
     model_id: str | None,
 ) -> dict:
     try:
-        index_info = Indexer(
-            profile, embedding, index_dir=index_dir
-        ).info().to_dict()
+        index_info = Indexer(profile, embedding, index_dir=index_dir).info().to_dict()
     except Exception:
         index_info = {}
 
@@ -205,7 +200,10 @@ def build_summary(
         tokens_total = 0
         for rec in ok_records:
             tok = rec.get("tokens") or {}
-            tokens_total += sum(int(tok.get(k) or 0) for k in zero_tokens())
+            tokens_total += billable_total(tok)
+            # Legacy records kept reasoning disjoint from output.
+            if rec.get("usage_version", 1) < 2:
+                tokens_total += int(tok.get("reasoning") or 0)
 
         latency_vals = [float(r["latency_ms"]) for r in ok_records]
         per_variant[variant] = {
@@ -222,6 +220,7 @@ def build_summary(
 
     return {
         "schema": 1,
+        "usage_version": 2,
         "run_id": run_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "profile_id": profile.id,

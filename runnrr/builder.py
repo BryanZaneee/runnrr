@@ -22,6 +22,7 @@ memoized per kb_root for the process lifetime, so setting it would serve stale
 indexes while a user edits notes. Single uvicorn worker → last-write-wins on
 concurrent saves is acceptable.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -36,10 +37,11 @@ from pydantic import BaseModel, Field
 
 from runnrr import config, profiles
 from runnrr.kb_loader import KBError, _safe_resolve, iter_kb_files
-from runnrr.skills import _parse_frontmatter, discover_skills
 from runnrr.profiles import ProfileConfigError, _validate_tool_names, load_profile
 from runnrr.ratelimit import limiter
+from runnrr.skills import _parse_frontmatter, discover_skills
 from runnrr.tools.registry import TOOL_DEFS
+
 
 def _require_builder() -> None:
     if not config.ENABLE_PROFILE_EDITOR:
@@ -49,9 +51,7 @@ def _require_builder() -> None:
 router = APIRouter()  # ungated: /api/tools only
 # Gate runs as a dependency so a disabled builder 404s before body validation
 # can leak endpoint existence via 422s.
-builder_router = APIRouter(
-    prefix="/api/builder", dependencies=[Depends(_require_builder)]
-)
+builder_router = APIRouter(prefix="/api/builder", dependencies=[Depends(_require_builder)])
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 OWNER_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
@@ -61,22 +61,24 @@ MAX_NOTE_BYTES = 200_000
 # (get_resume_summary, get_project_context) and semantic_search_kb (needs a
 # CLI-built RAG index a visitor can't produce). Enforced server-side — the
 # frontend picker hides the rest, but a direct POST must not bypass that.
-BUILDER_ALLOWED_TOOLS = frozenset({
-    "list_kb",
-    "read_file",
-    "search_kb",
-    "web_search",
-    "fetch_url_text",
-    "calculator",
-    "catalog_lookup",
-    "qualify_lead",
-    "lead_capture_preview",
-    "checkout_link_preview",
-    # Skills are the whole point of the builder: a procedure someone writes in
-    # plain English. Safe to allow because read_skill only reads files this same
-    # API wrote, inside the profile's own directory.
-    "read_skill",
-})
+BUILDER_ALLOWED_TOOLS = frozenset(
+    {
+        "list_kb",
+        "read_file",
+        "search_kb",
+        "web_search",
+        "fetch_url_text",
+        "calculator",
+        "catalog_lookup",
+        "qualify_lead",
+        "lead_capture_preview",
+        "checkout_link_preview",
+        # Skills are the whole point of the builder: a procedure someone writes in
+        # plain English. Safe to allow because read_skill only reads files this same
+        # API wrote, inside the profile's own directory.
+        "read_skill",
+    }
+)
 
 # Tools that read catalog.json from the profile's data_root. Selecting any of
 # them provisions the generic demo catalog below so the tool actually works.
@@ -326,9 +328,7 @@ async def save_profile(
     if is_create:
         _sweep_expired_builder_profiles()
         if _count_builder_profiles() >= config.MAX_BUILDER_PROFILES:
-            raise HTTPException(
-                status_code=503, detail="the builder is at capacity right now"
-            )
+            raise HTTPException(status_code=503, detail="the builder is at capacity right now")
 
     # Validate before writing anything so a bad request leaves no broken file.
     disallowed = sorted(set(req.tools) - BUILDER_ALLOWED_TOOLS)
@@ -539,11 +539,7 @@ async def write_skill(
     # them. They never see frontmatter, and the result is still a portable
     # SKILL.md folder.
     resolved.write_text(
-        "---\n"
-        f"name: {req.name}\n"
-        f"description: {req.description}\n"
-        "---\n\n"
-        f"{req.steps.strip()}\n",
+        f"---\nname: {req.name}\ndescription: {req.description}\n---\n\n{req.steps.strip()}\n",
         encoding="utf-8",
     )
     return {"ok": True, "slug": req.slug}

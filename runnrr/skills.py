@@ -1,32 +1,9 @@
-"""Plain-English skills: `<profile>/skills/<slug>/SKILL.md`.
+"""Profile skills: catalog in the prompt, bodies and references as tool results.
 
-A skill is how someone who does not write Python teaches an agent to *do*
-something. Knowledge notes are facts the agent knows; a skill is a procedure it
-follows. Both are markdown, neither involves JSON or a schema.
-
-Progressive disclosure, three tiers
------------------------------------
-1. **Discovery** — a catalog of `name: description` lines goes into the system
-   prompt. One line per skill, so a hundred skills cost a hundred lines rather
-   than a hundred bodies.
-2. **Activation** — the model calls `read_skill` and the full body comes back as
-   a tool result.
-3. **Reference** — anything else in the skill folder is reachable with the
-   existing `read_file`.
-
-Why the body arrives as a tool result and never as a prompt rewrite
--------------------------------------------------------------------
-The system block carries a cache breakpoint. Injecting a skill body into the
-system prompt mid-conversation would invalidate the cached prefix on the exact
-turn the agent starts doing real work — and that failure is silent, visible only
-as a cost and latency curve. Tool results land in the append-only message tail
-instead, where they are free. Pinned by
-`test_load_skill_does_not_touch_the_system_prompt`.
-
-The frontmatter parser handles two string keys and nothing else. That is not an
-oversight: it keeps the format authorable by hand and avoids a YAML dependency
-for `name` and `description`. Anything richer belongs in the body.
+Tool results preserve the cached system prefix. Frontmatter accepts only flat
+name/description strings; richer instructions belong in the Markdown body.
 """
+
 from __future__ import annotations
 
 import logging
@@ -36,9 +13,7 @@ from pathlib import Path
 log = logging.getLogger("runnrr.skills")
 
 MAX_DESCRIPTION_CHARS = 200
-# The catalog sits inside the cached prompt prefix, so it is stable and cheap —
-# but it is not free, and an unbounded one would re-inflate the very prefix the
-# caching work exists to shrink.
+# Bound the cached prompt prefix even for large skill collections.
 MAX_CATALOG_CHARS = 8000
 
 

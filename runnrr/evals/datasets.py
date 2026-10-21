@@ -1,4 +1,5 @@
 """Load per-profile RAG eval case lists from ``profiles/<id>/evals/rag.json``."""
+
 from __future__ import annotations
 
 import json
@@ -27,15 +28,11 @@ def _as_str_tuple(value: object, field: str, case_id: str) -> tuple[str, ...]:
     if value is None:
         return ()
     if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
-        raise ValueError(
-            f"case {case_id!r}: {field} must be a list of strings"
-        )
+        raise ValueError(f"case {case_id!r}: {field} must be a list of strings")
     return tuple(value)
 
 
-def load_rag_dataset(
-    profile_id: str, *, profile_root: Path | None = None
-) -> RagDataset:
+def load_rag_dataset(profile_id: str, *, profile_root: Path | None = None) -> RagDataset:
     """Read ``(profile_root or PROFILE_ROOT)/<profile_id>/evals/rag.json``."""
     root = (profile_root or PROFILE_ROOT).resolve()
     path = root / profile_id / "evals" / "rag.json"
@@ -61,9 +58,7 @@ def load_rag_dataset(
         if ground_truth is None:
             ground_truth = ""
         if not isinstance(ground_truth, str):
-            raise ValueError(
-                f"case {case_id!r}: ground_truth_answer must be a string"
-            )
+            raise ValueError(f"case {case_id!r}: ground_truth_answer must be a string")
 
         cases.append(
             RagCase(

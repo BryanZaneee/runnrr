@@ -1,4 +1,5 @@
 """Eval runner tests — deterministic, no network (fake embeddings + injected providers)."""
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,6 @@ import pytest
 from runnrr.evals.datasets import RagCase, RagDataset
 from runnrr.evals.runner import RAGEvaluator
 from runnrr.profiles import AgentProfile
-from runnrr.providers.base import Event
 from runnrr.rag.embeddings import FakeEmbeddingProvider
 from runnrr.rag.indexer import Indexer
 from tests.conftest import FakeProvider
@@ -31,6 +31,7 @@ def mini_rag_env(sqlite_vec_available, tmp_path, monkeypatch):
     runs_root = tmp_path / "runs"
     monkeypatch.setenv("RUNNRR_EMBEDDING_BACKEND", "fake")
     import importlib
+
     from runnrr import config
 
     importlib.reload(config)
@@ -157,9 +158,7 @@ def test_run_end_to_end_with_fake_provider_and_graders(mini_rag_env) -> None:
         profile_id="mini-eval",
         cases=(mini_rag_env["dataset"].cases[1],),
     )
-    result = evaluator.run_end_to_end(
-        e2e_dataset, variant="hybrid", model_id="claude-haiku-4-5"
-    )
+    result = evaluator.run_end_to_end(e2e_dataset, variant="hybrid", model_id="claude-haiku-4-5")
 
     record = result.records[0]
     assert "portable framework" in record["answer"]
@@ -171,9 +170,7 @@ def test_run_end_to_end_with_fake_provider_and_graders(mini_rag_env) -> None:
         profile_id="mini-eval",
         cases=(mini_rag_env["dataset"].cases[0],),
     )
-    result2 = evaluator.run_end_to_end(
-        no_gt_dataset, variant="hybrid", model_id="claude-haiku-4-5"
-    )
+    result2 = evaluator.run_end_to_end(no_gt_dataset, variant="hybrid", model_id="claude-haiku-4-5")
     assert result2.records[0]["metrics"]["answer_vs_ground_truth"] is None
 
 
@@ -193,3 +190,31 @@ def test_records_jsonl_roundtrip(mini_rag_env) -> None:
     parsed = [json.loads(line) for line in lines if line.strip()]
     assert len(parsed) == len(mini_rag_env["dataset"].cases)
     assert parsed[0]["schema"] == 1
+
+
+def test_failed_evaluation_skips_grading_and_keeps_one_loop(mini_rag_env):
+    import asyncio
+
+    loops = []
+
+    class FailedProvider(FakeProvider):
+        async def stream(self, **kwargs):
+            loops.append(asyncio.get_running_loop())
+            yield {"type": "error", "text": "provider failed"}
+
+    def unexpected_grade(_):
+        pytest.fail("failed answers must not invoke paid graders")
+
+    evaluator = RAGEvaluator(
+        mini_rag_env["profile"],
+        embedding_provider=mini_rag_env["embedding"],
+        provider_factory=lambda _: FailedProvider([]),
+        grade_fn=unexpected_grade,
+        runs_root=mini_rag_env["runs_root"],
+        index_dir=mini_rag_env["index_dir"],
+    )
+    result = evaluator.run_end_to_end(
+        mini_rag_env["dataset"], variant="closed_book", model_id="claude-sonnet-4-5"
+    )
+    assert len(loops) == 2 and loops[0] is loops[1]
+    assert all(r["status"] == "error" for r in result.records)

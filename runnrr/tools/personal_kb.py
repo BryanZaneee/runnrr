@@ -7,6 +7,7 @@ opt in by listing them in its ``profile.json`` ``tools`` — but a generic
 business profile should never inherit them. See ``DEFAULT_PROFILE_TOOLS`` in
 ``runnrr/profiles.py``: it intentionally excludes these.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -41,10 +42,21 @@ def get_project_context(
     try:
         loaded = read_file(rel, root=root)
     except KBError:
+        loaded = None
+    try:
+        snapshot = read_file(f"github/{slug}.md", root=root)
+    except KBError:
+        snapshot = None
+    if not loaded and not snapshot:
         raise KBError(
-            f"no project file for '{project_name}'. Try list_kb(subdir='projects') to see what's available."
+            f"no project file for '{project_name}'. Try list_kb(subdir='projects') or list_kb(subdir='github')."
         )
-    return {"project": slug, "summary": loaded["content"]}
+    return {
+        "project": slug,
+        "summary": loaded["content"] if loaded else "",
+        "github_snapshot": snapshot["content"] if snapshot else "",
+        "note": "Maintainer notes describe personal contributions; the dated website/GitHub snapshot describes current public project facts. Cite its URL and date, and explain conflicting or missing information.",
+    }
 
 
 def project_context_metadata(

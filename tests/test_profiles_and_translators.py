@@ -15,6 +15,28 @@ class DummyClient:
     pass
 
 
+@pytest.mark.parametrize("profile_id", ["../outside", "nested/../../outside", "."])
+def test_profile_cannot_escape_profile_root(tmp_path, profile_id):
+    root = tmp_path / "profiles"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "profile.json").write_text("{}")
+    (outside / "system.md").write_text("Outside instructions")
+    with pytest.raises(ProfileConfigError, match="direct child"):
+        load_profile(profile_id, profile_root=root)
+
+
+def test_profile_rejects_symlink_outside_profile_root(tmp_path):
+    root = tmp_path / "profiles"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (root / "linked").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ProfileConfigError, match="direct child"):
+        load_profile("linked", profile_root=root)
+
+
 async def collect(gen):
     return [ev async for ev in gen]
 
@@ -24,7 +46,7 @@ def test_personal_agent_profile_loads_persona_and_kb_root():
     assert profile.id == "personal-agent"
     assert profile.kb_root.name == "kb"
     assert "advocate-in-residence" in profile.system_prompt
-    assert profile.label == "Personal Agent"
+    assert profile.label == "Bryan's Experience Guide"
     assert "get_resume_summary" in profile.tools
     assert "Bryan's resume" in profile.tool_descriptions["get_resume_summary"]
     assert "Tell me about Shuttrr." in profile.suggestions

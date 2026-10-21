@@ -1,4 +1,5 @@
 """Durable UTC-day token reservations, shared by all workers."""
+
 from __future__ import annotations
 
 import json
@@ -28,7 +29,9 @@ class TokenBudget:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             conn = sqlite3.connect(self.path, timeout=5)
             conn.execute("BEGIN IMMEDIATE")
-            conn.execute("CREATE TABLE IF NOT EXISTS budget (day TEXT PRIMARY KEY, used INTEGER NOT NULL)")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS budget (day TEXT PRIMARY KEY, used INTEGER NOT NULL)"
+            )
             yield conn
             conn.commit()
         except (OSError, sqlite3.Error) as exc:
@@ -58,8 +61,10 @@ class TokenBudget:
         # Reconcile only completed calls with authoritative usage. Unknown costs
         # keep their whole reservation, including after cancellation or restart.
         with self._connection() as conn:
-            conn.execute("UPDATE budget SET used = MAX(0, used + ?) WHERE day = ?",
-                         (max(0, actual) - reserved, day))
+            conn.execute(
+                "UPDATE budget SET used = MAX(0, used + ?) WHERE day = ?",
+                (max(0, actual) - reserved, day),
+            )
 
     def has_capacity(self) -> bool:
         try:
@@ -71,16 +76,22 @@ class TokenBudget:
         if tokens <= 0:
             return
         with self._connection() as conn:
-            conn.execute("INSERT INTO budget VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET used = used + excluded.used",
-                         (self._today(), tokens))
+            conn.execute(
+                "INSERT INTO budget VALUES (?, ?) ON CONFLICT(day) DO UPDATE SET used = used + excluded.used",
+                (self._today(), tokens),
+            )
 
     def stats(self) -> dict:
         day = self._today()
         with self._connection() as conn:
             row = conn.execute("SELECT used FROM budget WHERE day = ?", (day,)).fetchone()
         used = row[0] if row else 0
-        return {"date": day, "used": used, "limit": self.daily_limit,
-                "remaining": max(0, self.daily_limit - used)}
+        return {
+            "date": day,
+            "used": used,
+            "limit": self.daily_limit,
+            "remaining": max(0, self.daily_limit - used),
+        }
 
 
 TOKEN_BUDGET = TokenBudget(daily_limit=DAILY_TOKEN_BUDGET)
@@ -96,7 +107,9 @@ def reserve_paid_call(operation: str) -> None:
     except (ValueError, TypeError, AttributeError) as exc:
         raise BudgetExhausted("paid work paused: spending bound is not configured") from exc
     with TOKEN_BUDGET._connection() as conn:
-        conn.execute("CREATE TABLE IF NOT EXISTS spending (day TEXT PRIMARY KEY, used INTEGER NOT NULL CHECK(used BETWEEN 0 AND 500000))")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS spending (day TEXT PRIMARY KEY, used INTEGER NOT NULL CHECK(used BETWEEN 0 AND 500000))"
+        )
         day = TOKEN_BUDGET._today()
         conn.execute("INSERT INTO spending VALUES (?, 0) ON CONFLICT DO NOTHING", (day,))
         if not conn.execute(

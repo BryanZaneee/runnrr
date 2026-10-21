@@ -1,4 +1,5 @@
 """CLI for RAG evaluation runs, comparison, and reporting."""
+
 from __future__ import annotations
 
 import argparse
@@ -46,9 +47,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         if not args.model_id:
             raise SystemExit("end-to-end mode requires --model <MODEL_REGISTRY id>")
         for variant in variants:
-            result = evaluator.run_end_to_end(
-                dataset, variant=variant, model_id=args.model_id
-            )
+            result = evaluator.run_end_to_end(dataset, variant=variant, model_id=args.model_id)
     _print_json(result.summary)
     print(f"run_dir: {result.run_dir}", flush=True)
     return 0
@@ -102,9 +101,7 @@ def _cmd_compare(args: argparse.Namespace) -> int:
         c_avg = sum(c_vals) / len(c_vals)
         delta = c_avg - b_avg
         lift = (delta / b_avg) if b_avg else float("nan")
-        print(
-            f"{key:<22} {b_avg:8.3f} {c_avg:8.3f} {delta:+8.3f} {lift:+8.1%}"
-        )
+        print(f"{key:<22} {b_avg:8.3f} {c_avg:8.3f} {delta:+8.3f} {lift:+8.1%}")
 
     b_lat = _avg_latency(base.values())
     c_lat = _avg_latency(cand.values())
@@ -186,7 +183,9 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="Embedding backend override. Use --backend fake for tests.",
     )
-    parser.add_argument("--model", dest="embed_model", default=None, help="Embedding model override.")
+    parser.add_argument(
+        "--model", dest="embed_model", default=None, help="Embedding model override."
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 

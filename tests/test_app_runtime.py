@@ -1,4 +1,5 @@
 """Runtime, budget, and RAG health endpoint tests."""
+
 from __future__ import annotations
 
 import json
@@ -253,18 +254,14 @@ class TestRagIndexStatus:
 
 
 class TestStaleIndexWarning:
-    def test_current_index_emits_no_stale_warning(
-        self, tmp_path, monkeypatch, caplog
-    ):
+    def test_current_index_emits_no_stale_warning(self, tmp_path, monkeypatch, caplog):
         from runnrr import app as app_module
         from runnrr import config
         from runnrr import profiles as profiles_module
         from runnrr.app import warn_stale_indexes
         from runnrr.rag.indexer import Indexer
 
-        profiles_root, profile = _stale_warn_profile_tree(
-            tmp_path, profile_id="warn-current"
-        )
+        profiles_root, profile = _stale_warn_profile_tree(tmp_path, profile_id="warn-current")
         monkeypatch.setattr(config, "RAG_INDEX_ROOT", tmp_path / "indexes")
         monkeypatch.setattr(config, "EMBEDDING_BACKEND", "fake")
         monkeypatch.setattr(config, "PROFILE_ROOT", profiles_root)
@@ -285,9 +282,7 @@ class TestStaleIndexWarning:
         from runnrr import profiles as profiles_module
         from runnrr.app import warn_stale_indexes
 
-        profiles_root, profile = _stale_warn_profile_tree(
-            tmp_path, profile_id="warn-missing"
-        )
+        profiles_root, profile = _stale_warn_profile_tree(tmp_path, profile_id="warn-missing")
         monkeypatch.setattr(config, "RAG_INDEX_ROOT", tmp_path / "indexes")
         monkeypatch.setattr(config, "EMBEDDING_BACKEND", "fake")
         monkeypatch.setattr(config, "PROFILE_ROOT", profiles_root)
@@ -382,6 +377,7 @@ class TestAbuseProtection:
         monkeypatch.setenv("RATE_LIMIT_ENABLED", "1")
 
         import importlib
+
         from runnrr import config, ratelimit
 
         importlib.reload(config)

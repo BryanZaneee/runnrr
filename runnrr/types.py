@@ -4,10 +4,10 @@ These types document the dictionaries that cross module boundaries. They are
 kept intentionally narrow so runtime code can stay plain and provider-specific
 details can remain inside provider adapters.
 """
+
 from __future__ import annotations
 
 from typing import Any, Literal, NotRequired, Required, TypeAlias, TypedDict
-
 
 ProviderName = Literal["anthropic", "openai_compat", "gemini"]
 ProviderMessage: TypeAlias = Any
@@ -17,7 +17,7 @@ class UsagePayload(TypedDict, total=False):
     """Normalized per-hop token usage. Semantics are defined in runnrr/usage.py.
 
     `input_tokens` is the full prompt size; the two cache fields are subsets of
-    it. `reasoning_tokens` is disjoint from `output_tokens`.
+    it. `reasoning_tokens` is a subset of `output_tokens` (usage version 2).
     """
 
     input_tokens: int
@@ -38,6 +38,11 @@ class SessionDict(TypedDict):
     last_seen: float
     provider: str
     profile: str
+    model: NotRequired[str]
+    turns: NotRequired[int]
+    busy: NotRequired[bool]
+    project_id: NotRequired[str | None]
+    project_owner: NotRequired[str | None]
 
 
 class BrandMetadata(TypedDict, total=False):

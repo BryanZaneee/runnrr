@@ -20,7 +20,7 @@
 
 ## Checklist
 
-- [ ] Lint, typecheck, and tests pass locally
+- [ ] `scripts/check.sh` passes; browser checks pass for UI changes
 - [ ] Tests added or updated for behavioral changes
 - [ ] `.env.example` updated if new env vars were introduced
 - [ ] Incomplete functionality is behind a feature flag

@@ -8,6 +8,72 @@ the source code alone. New decisions go at the top, dated. Each entry should ans
 
 ---
 
+## 2026-10-21 — Audited workstation foundations
+
+Preserved the current usage/project/workstation work while replacing stale
+removal plans with a current roadmap. Retrieval builds publish immutable
+index generations so failures cannot destroy a usable index. Chat turns are
+serialized per session, incomplete backend turns roll back, and truncation is
+visible. Checks now cover the integrated browser features. See
+[maintenance results](docs/maintenance.md) for scope and remaining work.
+
+## 2026-10-16 — Local projects and public portfolio knowledge
+
+New threads choose an assistant before selecting a project. Local workspaces
+store user-selected text folders in SQLite; the website exposes only read-only
+portfolio snapshots. The website itself supplies the inventory, with public
+GitHub documentation added where linked and public website facts for private
+projects. This keeps the generic workstation separate from Bryan’s showcase.
+Daily refresh uses direct text and needs no paid embeddings. See docs/projects.md.
+
+## 2026-10-16 — Distinguish agents and projects
+
+Agent badges now use colored person outlines while projects keep distinct
+colored initials, across the picker, sidebar, and thread header. Colors use
+the full collection so searching does not change them. The public workstation
+now lives at `/runnrr/`, with old `/easyagent/` links redirected by Caddy.
+
+## 2026-10-16 — Usage analytics
+
+**Choice:** Adopt inclusive output (reasoning is a subset) at the owner's request,
+version the accounting contract, and expose per-turn metrics plus durable SQLite
+chat-usage aggregates. Reuse the existing normalization, pricing and budget;
+keep unknown prices null and missing/interrupted reports explicit. Store only
+accounting metadata, with session IDs hashed for distinct counts.
+
+**Why:** The workstation hid cache, reasoning, cost and timing behind a single
+number. Categories, pricing coverage, and history make those details inspectable.
+Direct SSE capture fits this API runtime better than scanning CLI transcripts.
+See [usage documentation](docs/usage.md) for accounting rules and compatibility.
+
+**Rejected:** Persisting conversations as part of metrics, adding a frontend
+framework, guessing prices, importing CLI account quotas, and adding reasoning
+or cached tokens twice. Old eval records keep their original semantics.
+
+---
+
+## 2026-10-16 — Thread-first workstation overhaul
+
+**Choice:** Replace the previous workstation with a compact thread sidebar,
+conversation, floating composer, and resizable workspace panel. Keep vanilla
+HTML/CSS/JS, the existing SSE handling, Markdown sanitization, and runtime APIs.
+Add page-local rename, pin, snooze, settle, restore, and delete/undo actions.
+The composer exposes configured assistants and models; existing conversations
+keep their original model when reopened. Remove channel/automation placeholders
+from the main navigation and replace external fonts with the system font stack.
+
+**Why:** The owner selected a compact thread workspace as the visual
+reference and prioritized the UI overhaul ahead of storage and subscriptions.
+Capabilities should be easy to inspect without a technical dashboard. Thread
+organization is explicitly temporary until SQLite-backed sessions are added.
+Snooze means returning a thread to the sidebar, not scheduled execution.
+
+**Rejected:** Importing a separate application stack, persisting transcripts only in
+the browser, copying coding-only panels, and exposing controls that simulate
+unimplemented assistant creation, uploads, integrations, or capability editing.
+
+---
+
 ## 2026-09-22 — Supplied workstation replaces prior UI
 
 **Choice:** Replace the dashboard, builder, and eval pages with the supplied light

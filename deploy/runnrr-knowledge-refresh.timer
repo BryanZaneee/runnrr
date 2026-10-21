@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Runnrr public GitHub refresh
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=runnrr-knowledge-refresh.service
+
+[Install]
+WantedBy=timers.target

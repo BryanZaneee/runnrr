@@ -1,23 +1,25 @@
-"""Provider-agnostic agent loop. Mirrors the run_conversation pattern from
-notebook 001_tools_009.ipynb — bounded loop on stop_reason, run tools, append
-results, repeat. Differences: yields normalized SSE events, calls into a
-LLMProvider so the same loop covers Anthropic + OpenAI/Moonshot.
-"""
+"""Bounded provider-agnostic agent loop with streamed text, tools, and usage."""
+
 from __future__ import annotations
 
 import asyncio
-import logging
 import json
+import logging
 import time
 from typing import AsyncIterator
 
 from runnrr.budget import TOKEN_BUDGET, BudgetExhausted
-from runnrr.usage import billable_total, tally, zero_tokens
-from runnrr.config import MAX_PARALLEL_TOOLS, MAX_TOKENS, MAX_TOOL_HOPS
+from runnrr.config import (
+    MAX_PARALLEL_TOOLS,
+    MAX_REQUEST_TOKEN_RESERVATION,
+    MAX_TOKENS,
+    MAX_TOOL_HOPS,
+)
 from runnrr.profiles import AgentProfile, load_profile
 from runnrr.providers.base import LLMProvider
 from runnrr.tools import run_tool
 from runnrr.types import SessionDict
+from runnrr.usage import billable_total, tally, zero_tokens
 
 log = logging.getLogger("runnrr.agent")
 
@@ -41,16 +43,8 @@ async def run_conversation_stream(
     tool_slots = asyncio.Semaphore(MAX_PARALLEL_TOOLS)
     session["messages"].append(provider.format_user(user_message))
 
-    # TODO(mcp): if profile.mcp_servers is non-empty, spawn stdio MCP clients on
-    # first use, list their tools, merge into provider.tools_for_provider(...)'s
-    # catalog, and dispatch matching tool_use_complete events through the MCP
-    # client (rather than run_tool). Out of scope for this task — the schema is
-    # parsed and stored on AgentProfile.mcp_servers, but no client connects yet.
-    # Built once per turn, not once per hop. AgentProfile is frozen and immutable
-    # within a turn, so rebuilding was pure waste: a deepcopy per overridden schema
-    # and, on Gemini, a full FunctionDeclaration reconstruction every hop. The
-    # bigger win is prefix stability -- one object identity across all hops is what
-    # keeps the prompt cache warm.
+    # MCP clients are not connected yet. Keep prompts and tool schemas stable
+    # across hops; skill bodies arrive separately as tool results.
     system_block = provider.system_for_provider(profile)
     tool_schemas = provider.tools_for_provider(profile)
 
@@ -64,9 +58,24 @@ async def run_conversation_stream(
         try:
             # UTF-8 JSON bytes plus framing conservatively bound text/tool inputs.
             # Anthropic may raise its output cap for extended thinking.
-            output_cap = max(max_tokens or MAX_TOKENS, (getattr(provider, "thinking_budget", 0) or 0) + 1024)
-            reservation = len(json.dumps([session["messages"], system_block, tool_schemas], ensure_ascii=False, default=lambda value: value.model_dump(mode="json")).encode()) + 8192 + output_cap
+            output_cap = max(
+                max_tokens or MAX_TOKENS, (getattr(provider, "thinking_budget", 0) or 0) + 1024
+            )
+            reservation = (
+                len(
+                    json.dumps(
+                        [session["messages"], system_block, tool_schemas],
+                        ensure_ascii=False,
+                        default=lambda value: value.model_dump(mode="json"),
+                    ).encode()
+                )
+                + 8192
+                + output_cap
+            )
+            if MAX_REQUEST_TOKEN_RESERVATION and reservation > MAX_REQUEST_TOKEN_RESERVATION:
+                raise BudgetExhausted("This thread is too large for the demo. Start a new thread.")
             day = TOKEN_BUDGET.reserve(reservation)
+            yield {"event": "model_start", "hop": hop}
             async for ev in provider.stream(
                 model=model,
                 messages=session["messages"],
@@ -91,8 +100,8 @@ async def run_conversation_stream(
                 elif t == "message_done":
                     stop_reason = ev.get("stop_reason") or "end_turn"
                 elif t == "error":
-                    yield {"event": "error", "message": ev.get("text", "provider error")}
-                    return
+                    # Use the shared failure path so any reported usage survives.
+                    raise RuntimeError("provider reported a stream error")
             if pending_usage is not None:
                 tokens = zero_tokens()
                 tally(tokens, pending_usage)
@@ -102,11 +111,7 @@ async def run_conversation_stream(
             yield {"event": "error", "message": str(exc)}
             return
         except Exception as exc:
-            # SDK/network failures (auth, timeout, disconnect) become one sanitized
-            # error event instead of an exception escaping the SSE stream. Accepted
-            # edge: the session may end with a trailing user message and no
-            # assistant turn — all three provider APIs tolerate that on the next
-            # request.
+            # Keep internal provider details out of the public error event.
             log.exception(
                 "provider stream failed",
                 extra={
@@ -123,6 +128,7 @@ async def run_conversation_stream(
                 # Tokens already consumed still count against the daily budget.
                 yield {
                     "event": "usage",
+                    "usage_version": 2,
                     "category": "tools" if tool_calls_pending else "response",
                     "hop": hop,
                     "hop_ms": int((time.perf_counter() - hop_started) * 1000),
@@ -133,14 +139,11 @@ async def run_conversation_stream(
             return
 
         if pending_usage is not None:
-            # Categorize by what the hop produced, not by whether thinking happened —
-            # otherwise thinking-enabled models (Personal Agent can run Sonnet with extended
-            # thinking on every hop) would always land in "reasoning" and the Tools /
-            # Response buckets could never increment. Reasoning tokens travel
-            # separately on `reasoning_tokens` so the frontend can fan them out.
+            # Reasoning is a subset of output; classify usage by tools vs final text.
             category = "tools" if tool_calls_pending else "response"
             yield {
                 "event": "usage",
+                "usage_version": 2,
                 "category": category,
                 "hop": hop,
                 "hop_ms": int((time.perf_counter() - hop_started) * 1000),
@@ -148,20 +151,15 @@ async def run_conversation_stream(
                 **pending_usage,
             }
 
+        if stop_reason == "blocked":
+            yield {"event": "error", "message": "The model could not complete this response."}
+            return
+
         if stop_reason != "tool_use":
             yield {"event": "done", "stop_reason": stop_reason}
             return
 
-        # asyncio.to_thread keeps every handler synchronous while getting the
-        # blocking work off the event loop. That work is real: sync httpx calls
-        # in web_search and web_fetch, time.sleep in the Voyage backoff, and a
-        # synchronous Anthropic round-trip inside the RAG reranker. On the single
-        # uvicorn worker, one of those used to stall every other in-flight stream.
-        #
-        # gather runs the calls in one hop concurrently AND preserves input order,
-        # which matters beyond latency: the order of append_tool_results decides
-        # the message log, and a stable message log is what keeps the prompt
-        # prefix cacheable.
+        # Run blocking tools off-loop; gather preserves message order for caching.
         async def _run_one(tc: dict):
             async with tool_slots:
                 return await asyncio.to_thread(
@@ -175,16 +173,9 @@ async def run_conversation_stream(
                     allowed_tools=profile.tools,
                 )
 
-        results = list(
-            await asyncio.gather(*(_run_one(tc) for tc in tool_calls_pending))
-        )
+        results = list(await asyncio.gather(*(_run_one(tc) for tc in tool_calls_pending)))
 
-        # Append BEFORE yielding. If the client disconnects mid-yield, GeneratorExit
-        # propagates and anything after the yields never runs -- which used to leave
-        # an assistant tool_use turn with no matching tool_result, and every later
-        # request on that session_id 400s on Anthropic and OpenAI for the full
-        # 30-minute session TTL. The messages do not depend on the yields, so
-        # ordering them first is the whole fix.
+        # Commit tool results before yielding so disconnects cannot break pairing.
         provider.append_tool_results(session["messages"], results)
 
         for r in results:

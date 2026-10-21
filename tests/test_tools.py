@@ -2,6 +2,7 @@
 
 Covers path safety, line-cap behavior, search semantics, and the run_tool error envelope.
 """
+
 from __future__ import annotations
 
 import json
@@ -20,10 +21,10 @@ from runnrr.tools.definitions import ToolContext
 from runnrr.tools.personal_kb import get_project_context, get_resume_summary
 from runnrr.tools.registry import TOOL_DEFS, TOOL_DEFS_BY_NAME, TOOL_HANDLERS
 
-
 # --------------------------------------------------------------------------- #
 # _safe_resolve / path safety
 # --------------------------------------------------------------------------- #
+
 
 class TestPathSafety:
     def test_rejects_traversal(self):
@@ -64,6 +65,7 @@ class TestPathSafety:
 # list_kb
 # --------------------------------------------------------------------------- #
 
+
 class TestListKB:
     def test_root_listing_includes_subdirs(self):
         entries = list_kb("")
@@ -95,6 +97,7 @@ class TestListKB:
 # --------------------------------------------------------------------------- #
 # read_file
 # --------------------------------------------------------------------------- #
+
 
 class TestReadFile:
     def test_basic_read(self):
@@ -138,6 +141,7 @@ class TestReadFile:
 # search_kb
 # --------------------------------------------------------------------------- #
 
+
 class TestSearchKB:
     def test_finds_substring(self):
         results = search_kb("zonkletcheese-42")
@@ -166,6 +170,7 @@ class TestSearchKB:
 # --------------------------------------------------------------------------- #
 # Specialized helpers
 # --------------------------------------------------------------------------- #
+
 
 class TestSpecialized:
     def test_get_resume_summary_matches_read_file(self):
@@ -197,6 +202,7 @@ class TestSpecialized:
 # --------------------------------------------------------------------------- #
 # run_tool — the dispatcher and error envelope
 # --------------------------------------------------------------------------- #
+
 
 class TestRunTool:
     def test_dispatch_list_kb(self):
@@ -247,9 +253,7 @@ class TestRunTool:
         assert "retry" in error
 
     def test_unknown_project_returns_is_error(self):
-        result = run_tool(
-            "get_project_context", {"project_name": "nope"}, tool_use_id="t7"
-        )
+        result = run_tool("get_project_context", {"project_name": "nope"}, tool_use_id="t7")
         assert result.is_error is True
 
     def test_unexpected_tool_error_is_masked_by_default(self, monkeypatch):
@@ -289,6 +293,7 @@ class TestRunTool:
 # SCHEMAS sanity
 # --------------------------------------------------------------------------- #
 
+
 class TestSchemas:
     def test_all_schemas_have_required_fields(self):
         for s in SCHEMAS:
@@ -312,6 +317,7 @@ class TestSchemas:
 # --------------------------------------------------------------------------- #
 # web_search
 # --------------------------------------------------------------------------- #
+
 
 class _StubResponse:
     def __init__(self, status_code: int, payload: dict | None = None, text: str = ""):
@@ -338,6 +344,17 @@ class _FetchResponse:
         self.content = text.encode("utf-8")
         self.url = url
         self.headers = {"content-type": content_type, **(headers or {})}
+        self.encoding = "utf-8"
+        self.closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.closed = True
+
+    def iter_bytes(self):
+        yield self.content
 
 
 class TestWebSearch:
@@ -365,6 +382,7 @@ class TestWebSearch:
             )
 
         import runnrr.web_search as ws
+
         monkeypatch.setattr(ws.httpx, "post", fake_post)
 
         result = run_tool(
@@ -380,9 +398,7 @@ class TestWebSearch:
         assert captured["json"]["api_key"] == "fake-key"
         assert captured["json"]["max_results"] == 3
         assert result.source_summary == "searched public web, 1 result"
-        assert result.source_items == [
-            {"label": "Web result: fastapi.tiangolo.com", "kind": "web"}
-        ]
+        assert result.source_items == [{"label": "Web result: fastapi.tiangolo.com", "kind": "web"}]
 
     def test_missing_api_key_returns_is_error(self, monkeypatch):
         monkeypatch.delenv("TAVILY_API_KEY", raising=False)
@@ -404,6 +420,7 @@ class TestWebSearch:
             return _StubResponse(200, {"query": "q", "results": []})
 
         import runnrr.web_search as ws
+
         monkeypatch.setattr(ws.httpx, "post", fake_post)
 
         result = run_tool(
@@ -426,6 +443,7 @@ class TestWebSearch:
             return _StubResponse(429, text="rate limit")
 
         import runnrr.web_search as ws
+
         monkeypatch.setattr(ws.httpx, "post", fake_post)
 
         result = run_tool("web_search", {"query": "x"}, tool_use_id="ws4")
@@ -441,6 +459,7 @@ class TestWebSearch:
             return _StubResponse(200, {"query": "x", "answer": "", "results": []})
 
         import runnrr.web_search as ws
+
         monkeypatch.setattr(ws.httpx, "post", fake_post)
 
         run_tool("web_search", {"query": "x", "max_results": 999}, tool_use_id="ws5")
@@ -462,7 +481,40 @@ class TestWebSearch:
 # fetch_url_text
 # --------------------------------------------------------------------------- #
 
+
 class TestFetchUrlText:
+    def test_stops_reading_oversized_stream_and_closes_it(self, monkeypatch):
+        import runnrr.tools.web_fetch as wf
+
+        response = _FetchResponse()
+
+        def chunks():
+            yield b"x" * (wf.FETCH_MAX_BYTES + 1)
+            raise AssertionError("continued reading an oversized response")
+
+        monkeypatch.setattr(response, "iter_bytes", chunks)
+        monkeypatch.setattr(wf, "_stream_public", lambda *a, **k: response)
+        result = run_tool("fetch_url_text", {"url": "https://93.184.216.34/"}, "large")
+        assert result.is_error
+        assert "too large" in json.loads(result.content)["error"]
+        assert response.closed
+
+    def test_revalidates_redirect_before_following_it(self, monkeypatch):
+        import runnrr.tools.web_fetch as wf
+
+        response = _FetchResponse(302, headers={"location": "http://127.0.0.1/private"})
+        requests = []
+
+        def fetch(*args, **kwargs):
+            requests.append(args)
+            return response
+
+        monkeypatch.setattr(wf, "_stream_public", fetch)
+        result = run_tool("fetch_url_text", {"url": "https://93.184.216.34/"}, "redirect")
+        assert result.is_error
+        assert len(requests) == 1
+        assert response.closed
+
     def test_fetches_public_text_page(self, monkeypatch):
         import runnrr.tools.web_fetch as wf
 
@@ -472,8 +524,8 @@ class TestFetchUrlText:
             lambda host, port: [(None, None, None, None, ("93.184.216.34", 0))],
         )
         monkeypatch.setattr(
-            wf.httpx,
-            "get",
+            wf,
+            "_stream_public",
             lambda *args, **kwargs: _FetchResponse(
                 text="<html><head><title>Example Title</title></head><body><h1>Hello</h1><p>World</p></body></html>"
             ),
@@ -518,15 +570,17 @@ class TestFetchUrlText:
             lambda host, port: [(None, None, None, None, ("93.184.216.34", 0))],
         )
         monkeypatch.setattr(
-            wf.httpx,
-            "get",
+            wf,
+            "_stream_public",
             lambda *args, **kwargs: _FetchResponse(
                 text="not really an image",
                 content_type="image/png",
             ),
         )
 
-        result = run_tool("fetch_url_text", {"url": "https://example.com/image"}, tool_use_id="fetch3")
+        result = run_tool(
+            "fetch_url_text", {"url": "https://example.com/image"}, tool_use_id="fetch3"
+        )
         assert result.is_error is True
         assert "non-text" in json.loads(result.content)["error"]
 
@@ -534,6 +588,7 @@ class TestFetchUrlText:
 # --------------------------------------------------------------------------- #
 # calculator
 # --------------------------------------------------------------------------- #
+
 
 class TestCalculator:
     @pytest.mark.parametrize(
@@ -571,6 +626,7 @@ class TestCalculator:
 # --------------------------------------------------------------------------- #
 # Sales preview tools
 # --------------------------------------------------------------------------- #
+
 
 class TestSalesPreviewTools:
     def sales_data_root(self):
@@ -677,6 +733,7 @@ class TestSalesPreviewTools:
 # Engine vs. personal-site decoupling
 # --------------------------------------------------------------------------- #
 
+
 def _profile(kb_root, *, source_path_labels=(), source_labels=None):
     return AgentProfile(
         id="p",
@@ -712,7 +769,9 @@ class TestProfileScopedSourceLabels:
         )
         r = run_tool("read_file", {"path": "meta/faq.md"}, "t1", root=kb_root, profile=profile)
         assert r.source_items == [{"label": "Portfolio knowledge base", "kind": "kb_read"}]
-        r2 = run_tool("read_file", {"path": "resume/resume.md"}, "t2", root=kb_root, profile=profile)
+        r2 = run_tool(
+            "read_file", {"path": "resume/resume.md"}, "t2", root=kb_root, profile=profile
+        )
         assert r2.source_items == [{"label": "Resume", "kind": "kb_read"}]
 
     def test_generic_profile_gets_generic_label(self, kb_root):
@@ -724,7 +783,9 @@ class TestProfileScopedSourceLabels:
     def test_projects_slug_is_generic_engine_rule(self, kb_root):
         # projects/<slug> -> "Project: <Title>" stays a data-derived engine rule.
         profile = _profile(kb_root)
-        r = run_tool("read_file", {"path": "projects/widget.md"}, "t", root=kb_root, profile=profile)
+        r = run_tool(
+            "read_file", {"path": "projects/widget.md"}, "t", root=kb_root, profile=profile
+        )
         assert r.source_items == [{"label": "Project: Widget", "kind": "kb_read"}]
 
 
@@ -736,3 +797,63 @@ class TestMetadataBuilderArity:
         for tool in TOOL_DEFS:
             meta = tool.source_metadata({}, None, ctx)
             assert {"source_summary", "source_items", "source_count", "hidden_count"} <= set(meta)
+
+
+def test_fetch_pins_validated_address_and_preserves_tls_name(monkeypatch):
+    from runnrr.tools import web_fetch as wf
+
+    monkeypatch.setattr(
+        wf.socket, "getaddrinfo", lambda *a: [(None, None, None, None, ("93.184.216.34", 443))]
+    )
+    calls = []
+
+    def stream(method, url, **kwargs):
+        calls.append((url, kwargs))
+        return _FetchResponse()
+
+    monkeypatch.setattr(wf, "_stream_public", stream)
+    result = wf.fetch_url_text("https://example.com/page")
+    assert result["url"] == "https://example.com/page"
+    url, options = calls[0]
+    assert url.host == "93.184.216.34"
+    assert options["headers"]["Host"] == "example.com"
+    assert options["extensions"]["sni_hostname"] == "example.com"
+
+
+def test_hidden_directory_contents_not_discovered(tmp_path):
+    from runnrr.kb_loader import iter_kb_files, list_kb
+
+    hidden = tmp_path / ".private"
+    hidden.mkdir()
+    (hidden / "secret.md").write_text("hidden")
+    (tmp_path / "public.md").write_text("public")
+    assert [name for name, _ in iter_kb_files(root=tmp_path)] == ["public.md"]
+    assert [row["path"] for row in list_kb(root=tmp_path)] == ["public.md"]
+
+
+def test_fetch_real_httpx_transport_keeps_pinned_host_and_sni(monkeypatch):
+    import httpx
+
+    from runnrr.tools import web_fetch as wf
+
+    real_client = httpx.Client
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, headers={"content-type": "text/plain"}, text="public text")
+
+    def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        return real_client(**kwargs, transport=httpx.MockTransport(respond))
+
+    monkeypatch.setattr(wf.httpx, "Client", client)
+    monkeypatch.setattr(
+        wf.socket, "getaddrinfo", lambda *a: [(None, None, None, None, ("93.184.216.34", 443))]
+    )
+    result = wf.fetch_url_text("https://example.com/page")
+    assert result["excerpt"] == "public text"
+    assert result["url"] == "https://example.com/page"
+    assert requests[0].url.host == "93.184.216.34"
+    assert requests[0].headers["host"] == "example.com"
+    assert requests[0].extensions["sni_hostname"] == "example.com"

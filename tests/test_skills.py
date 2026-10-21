@@ -1,4 +1,5 @@
 """Skills: discovery, the trust boundary, and the cache coupling."""
+
 from __future__ import annotations
 
 import pytest
@@ -93,9 +94,7 @@ class TestReadSkillBody:
         with pytest.raises(SkillError):
             read_skill_body("nope", tmp_path)
 
-    @pytest.mark.parametrize(
-        "slug", ["../../etc/passwd", "/etc/passwd", "..", "a/../../b", ""]
-    )
+    @pytest.mark.parametrize("slug", ["../../etc/passwd", "/etc/passwd", "..", "a/../../b", ""])
     def test_traversal_is_impossible(self, tmp_path, slug):
         """slug is matched against discovered names, never joined into a path.
 

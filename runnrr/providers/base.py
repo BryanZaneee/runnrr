@@ -3,6 +3,7 @@
 The agent loop only sees normalized Events. Each concrete provider (Anthropic,
 OpenAI/Moonshot) translates its native wire format into these Events.
 """
+
 from __future__ import annotations
 
 from typing import Any, AsyncIterator, Literal, Protocol, TypedDict
@@ -26,7 +27,7 @@ class Event(TypedDict, total=False):
     tool_use_id: str
     name: str
     arguments: dict
-    stop_reason: Literal["end_turn", "tool_use"]
+    stop_reason: Literal["end_turn", "tool_use", "max_tokens", "blocked"]
     usage: UsagePayload
 
 

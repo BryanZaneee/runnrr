@@ -1,4 +1,5 @@
 """Provider factory registry — maps model config to LLMProvider instances."""
+
 from __future__ import annotations
 
 import os
@@ -11,15 +12,8 @@ class ProviderSetupError(RuntimeError):
     """Raised when a provider cannot be constructed from env + registry config."""
 
 
-# Providers are stateless apart from their SDK client, so one instance per model
-# is reusable. Before this, every chat turn built a fresh AsyncAnthropic /
-# AsyncOpenAI / genai.Client with its own httpx pool -- a full TCP+TLS handshake
-# per turn, and the pool was dropped to the GC rather than closed.
-#
-# Keyed by model_id only, because cfg is fully determined by it. Tests must call
-# clear_provider_cache() between cases: the async SDK clients bind their
-# transport to the event loop they are first used on, and FastAPI's TestClient
-# runs each request through a fresh loop.
+# SDK clients belong to one event loop. Reuse them in the server; evals own
+# separate clients and tests clear this cache between isolated loops.
 _PROVIDER_CACHE: dict[str, LLMProvider] = {}
 
 
@@ -29,14 +23,7 @@ def clear_provider_cache() -> None:
 
 
 def _assert_capabilities_honorable(cfg: ModelConfig) -> None:
-    """Raise if the config asks for something the resolved provider cannot do.
-
-    If a provider cannot honor a field, fail with a stable error instead of
-    silently dropping it. The live example: `thinking_budget` is read only on the
-    Anthropic path, so setting it on a Gemini or OpenAI entry did nothing at all
-    and nothing said so. Checked at construction time, so a misconfigured entry
-    fails on the first request rather than degrading invisibly forever.
-    """
+    """Reject capabilities the configured adapter cannot honor."""
     if cfg.get("thinking_budget") and not cfg.get("supports_thinking", False):
         raise ProviderSetupError(
             f"CAPABILITY_UNSUPPORTED: {cfg['model']} declares no thinking support "

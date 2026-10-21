@@ -6,6 +6,7 @@ end_turn termination, tool_use → tool_result handoff, and MAX_TOOL_HOPS cap.
 The KB primitives are real (the autouse `use_mini_kb` fixture in conftest.py points
 KB_ROOT at tests/fixtures/mini_kb), so tool dispatch in the loop produces real results.
 """
+
 from __future__ import annotations
 
 import json
@@ -138,8 +139,12 @@ async def collect_single_tool_result(
     provider = FakeProvider(
         [
             [
-                {"type": "tool_use_complete", "tool_use_id": f"tu_{tool_name}",
-                 "name": tool_name, "arguments": arguments},
+                {
+                    "type": "tool_use_complete",
+                    "tool_use_id": f"tu_{tool_name}",
+                    "name": tool_name,
+                    "arguments": arguments,
+                },
                 {"type": "message_done", "stop_reason": "tool_use"},
             ],
             [
@@ -178,9 +183,15 @@ class TestSingleTurnNoTools:
                 [
                     {"type": "text_delta", "text": "Bryan is "},
                     {"type": "text_delta", "text": "based in Florida."},
-                    {"type": "usage", "usage": {"input_tokens": 100, "output_tokens": 5,
-                                                 "cache_read_input_tokens": 0,
-                                                 "cache_creation_input_tokens": 0}},
+                    {
+                        "type": "usage",
+                        "usage": {
+                            "input_tokens": 100,
+                            "output_tokens": 5,
+                            "cache_read_input_tokens": 0,
+                            "cache_creation_input_tokens": 0,
+                        },
+                    },
                     {"type": "message_done", "stop_reason": "end_turn"},
                 ]
             ]
@@ -253,18 +264,34 @@ class TestOneToolHop:
             [
                 [
                     {"type": "tool_use_start", "name": "get_resume_summary"},
-                    {"type": "tool_use_complete", "tool_use_id": "tu_001",
-                     "name": "get_resume_summary", "arguments": {}},
-                    {"type": "usage", "usage": {"input_tokens": 200, "output_tokens": 30,
-                                                 "cache_read_input_tokens": 0,
-                                                 "cache_creation_input_tokens": 0}},
+                    {
+                        "type": "tool_use_complete",
+                        "tool_use_id": "tu_001",
+                        "name": "get_resume_summary",
+                        "arguments": {},
+                    },
+                    {
+                        "type": "usage",
+                        "usage": {
+                            "input_tokens": 200,
+                            "output_tokens": 30,
+                            "cache_read_input_tokens": 0,
+                            "cache_creation_input_tokens": 0,
+                        },
+                    },
                     {"type": "message_done", "stop_reason": "tool_use"},
                 ],
                 [
                     {"type": "text_delta", "text": "He studied CS at Test University."},
-                    {"type": "usage", "usage": {"input_tokens": 250, "output_tokens": 10,
-                                                 "cache_read_input_tokens": 0,
-                                                 "cache_creation_input_tokens": 0}},
+                    {
+                        "type": "usage",
+                        "usage": {
+                            "input_tokens": 250,
+                            "output_tokens": 10,
+                            "cache_read_input_tokens": 0,
+                            "cache_creation_input_tokens": 0,
+                        },
+                    },
                     {"type": "message_done", "stop_reason": "end_turn"},
                 ],
             ]
@@ -284,7 +311,9 @@ class TestOneToolHop:
         assert provider.turn_index == 2
 
         # tool_use_start + tool_result event surfaced.
-        assert any(e["event"] == "tool_use_start" and e["name"] == "get_resume_summary" for e in events)
+        assert any(
+            e["event"] == "tool_use_start" and e["name"] == "get_resume_summary" for e in events
+        )
         tool_results = [e for e in events if e["event"] == "tool_result"]
         assert len(tool_results) == 1
         assert tool_results[0]["tool_use_id"] == "tu_001"
@@ -302,7 +331,9 @@ class TestOneToolHop:
         assert "Test User Resume" in payload["content"]
 
         # Final answer streamed.
-        assert "Test University" in "".join(e.get("text", "") for e in events if e["event"] == "delta")
+        assert "Test University" in "".join(
+            e.get("text", "") for e in events if e["event"] == "delta"
+        )
 
         # Done emitted at the end.
         done = [e for e in events if e["event"] == "done"]
@@ -321,8 +352,12 @@ class TestOneToolHop:
         provider = FakeProvider(
             [
                 [
-                    {"type": "tool_use_complete", "tool_use_id": "tu_evil",
-                     "name": "read_file", "arguments": {"path": "../../../etc/passwd"}},
+                    {
+                        "type": "tool_use_complete",
+                        "tool_use_id": "tu_evil",
+                        "name": "read_file",
+                        "arguments": {"path": "../../../etc/passwd"},
+                    },
                     {"type": "message_done", "stop_reason": "tool_use"},
                 ],
                 [
@@ -361,9 +396,21 @@ class TestOneToolHop:
         ("tool_name", "arguments", "expected_label", "expected_kind", "summary_prefix"),
         [
             ("get_resume_summary", {}, "Resume", "kb_read", "read Resume"),
-            ("get_project_context", {"project_name": "widget"}, "Project: Widget", "kb_read", "read Project: Widget"),
+            (
+                "get_project_context",
+                {"project_name": "widget"},
+                "Project: Widget",
+                "kb_read",
+                "read Project: Widget",
+            ),
             ("read_file", {"path": "resume/resume.md"}, "Resume", "kb_read", "read Resume"),
-            ("search_kb", {"query": "zonkletcheese-42"}, "Portfolio knowledge base", "kb_search", "searched"),
+            (
+                "search_kb",
+                {"query": "zonkletcheese-42"},
+                "Portfolio knowledge base",
+                "kb_search",
+                "searched",
+            ),
             ("list_kb", {"subdir": ""}, "Knowledge base index", "kb_list", "listed"),
         ],
     )
@@ -469,9 +516,12 @@ class TestProviderFailure:
                 yield {"type": "text_delta", "text": "partial"}
                 yield {
                     "type": "usage",
-                    "usage": {"input_tokens": 40, "output_tokens": 7,
-                              "cache_read_input_tokens": 0,
-                              "cache_creation_input_tokens": 0},
+                    "usage": {
+                        "input_tokens": 40,
+                        "output_tokens": 7,
+                        "cache_read_input_tokens": 0,
+                        "cache_creation_input_tokens": 0,
+                    },
                 }
                 raise RuntimeError("secret upstream detail")
 
@@ -488,7 +538,8 @@ class TestProviderFailure:
 
         # The partial delta still streamed, then a generic error — no raw
         # exception text reaches the client and nothing propagates.
-        assert events[0] == {"event": "delta", "text": "partial"}
+        assert events[0] == {"event": "model_start", "hop": 0}
+        assert events[1] == {"event": "delta", "text": "partial"}
         assert events[-1] == {"event": "error", "message": "model provider error; please retry"}
         assert "secret" not in json.dumps(events)
 
@@ -514,18 +565,34 @@ class TestUsageCategorization:
                 [
                     {"type": "thinking_delta", "text": "Let me think..."},
                     {"type": "tool_use_start", "name": "get_resume_summary"},
-                    {"type": "tool_use_complete", "tool_use_id": "tu_r",
-                     "name": "get_resume_summary", "arguments": {}},
-                    {"type": "usage", "usage": {"input_tokens": 150, "output_tokens": 80,
-                                                 "cache_read_input_tokens": 0,
-                                                 "cache_creation_input_tokens": 0}},
+                    {
+                        "type": "tool_use_complete",
+                        "tool_use_id": "tu_r",
+                        "name": "get_resume_summary",
+                        "arguments": {},
+                    },
+                    {
+                        "type": "usage",
+                        "usage": {
+                            "input_tokens": 150,
+                            "output_tokens": 80,
+                            "cache_read_input_tokens": 0,
+                            "cache_creation_input_tokens": 0,
+                        },
+                    },
                     {"type": "message_done", "stop_reason": "tool_use"},
                 ],
                 [
                     {"type": "text_delta", "text": "Done."},
-                    {"type": "usage", "usage": {"input_tokens": 200, "output_tokens": 2,
-                                                 "cache_read_input_tokens": 0,
-                                                 "cache_creation_input_tokens": 0}},
+                    {
+                        "type": "usage",
+                        "usage": {
+                            "input_tokens": 200,
+                            "output_tokens": 2,
+                            "cache_read_input_tokens": 0,
+                            "cache_creation_input_tokens": 0,
+                        },
+                    },
                     {"type": "message_done", "stop_reason": "end_turn"},
                 ],
             ]
@@ -556,11 +623,16 @@ class TestHopLimit:
     async def test_max_hops_yields_error(self, monkeypatch, kb_root):
         # Squeeze the cap to keep the test fast and obvious.
         from runnrr import agent
+
         monkeypatch.setattr(agent, "MAX_TOOL_HOPS", 3)
 
         infinite_tool_call = [
-            {"type": "tool_use_complete", "tool_use_id": "tu_x",
-             "name": "list_kb", "arguments": {"subdir": ""}},
+            {
+                "type": "tool_use_complete",
+                "tool_use_id": "tu_x",
+                "name": "list_kb",
+                "arguments": {"subdir": ""},
+            },
             {"type": "message_done", "stop_reason": "tool_use"},
         ]
         provider = FakeProvider([infinite_tool_call] * 10)

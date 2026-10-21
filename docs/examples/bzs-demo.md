@@ -59,10 +59,10 @@ Run the backend and dashboard locally:
 
 ```bash
 .venv/bin/python -m uvicorn runnrr.app:app --reload --port 8001
-.venv/bin/python -m http.server 8000 --directory web
+# The runtime serves web/ directly; no second server is needed.
 ```
 
-Open `http://localhost:8000`, confirm the API base points at `http://127.0.0.1:8001`, then switch profiles in the dashboard/chat client. If the Customer Service semantic index is missing, either rebuild it for the cleanest RAG demo or use literal KB questions that work through `search_kb`.
+Open `http://127.0.0.1:8001` and choose an assistant in the workstation. If the Customer Service semantic index is missing, either rebuild it for the cleanest RAG demo or use literal KB questions that work through `search_kb`.
 
 ```bash
 .venv/bin/python -m runnrr.rag.cli --backend fake build customer-service

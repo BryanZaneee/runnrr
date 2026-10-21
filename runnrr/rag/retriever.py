@@ -1,4 +1,5 @@
 """Hybrid BM25 + vector retrieval with plain Reciprocal Rank Fusion."""
+
 from __future__ import annotations
 
 import time
@@ -16,6 +17,7 @@ from runnrr.rag.indexer import (
     MANIFEST_FILENAME,
     VECTOR_FILENAME,
     default_index_dir,
+    resolve_index_dir,
 )
 from runnrr.rag.vector_index import VectorIndex
 
@@ -69,9 +71,7 @@ class Retriever:
         candidate_k: int | None = None,
         k_rrf: int = DEFAULT_RRF_K,
     ) -> list[RetrievalResult]:
-        return self.search_with_signals(
-            query, k=k, candidate_k=candidate_k, k_rrf=k_rrf
-        ).fused
+        return self.search_with_signals(query, k=k, candidate_k=candidate_k, k_rrf=k_rrf).fused
 
     def search_with_signals(
         self,
@@ -195,15 +195,11 @@ def get_retriever_for_profile(
 ) -> Retriever:
     """Load the active profile's persisted indexes."""
     embedding = embedding_provider or get_embedding_provider()
-    root = (index_dir or default_index_dir(profile)).resolve()
+    root = resolve_index_dir((index_dir or default_index_dir(profile)).resolve())
     manifest_path = root / MANIFEST_FILENAME
     bm25_path = root / BM25_FILENAME
     vector_path = root / VECTOR_FILENAME
-    missing = [
-        path.name
-        for path in (manifest_path, bm25_path, vector_path)
-        if not path.exists()
-    ]
+    missing = [path.name for path in (manifest_path, bm25_path, vector_path) if not path.exists()]
     if missing:
         raise FileNotFoundError(
             f"RAG index missing for profile {profile.id!r}; "
@@ -224,19 +220,18 @@ def get_retriever_for_profile(
         if cached is not None:
             return cached
 
-    retriever = Retriever(
-        embedding_provider=embedding,
-        bm25_index=BM25Index.load(bm25_path),
-        vector_index=VectorIndex(vector_path, dim=embedding.dim),
-    )
-    with _RETRIEVER_CACHE_LOCK:
+        retriever = Retriever(
+            embedding_provider=embedding,
+            bm25_index=BM25Index.load(bm25_path),
+            vector_index=VectorIndex(vector_path, dim=embedding.dim),
+        )
         _evict_matching_locked(
             profile_id=profile.id,
             index_dir=str(root),
             keep_key=key,
         )
         _RETRIEVER_CACHE[key] = retriever
-    return retriever
+        return retriever
 
 
 def hybrid_candidate_pool(k: int, *, rerank: bool) -> int:
@@ -303,7 +298,11 @@ def clear_retriever_cache(
         for key in list(_RETRIEVER_CACHE):
             if profile_id is not None and key.profile_id != profile_id:
                 continue
-            if resolved_index_dir is not None and key.index_dir != resolved_index_dir:
+            if (
+                resolved_index_dir is not None
+                and key.index_dir != resolved_index_dir
+                and Path(resolved_index_dir) not in Path(key.index_dir).parents
+            ):
                 continue
             _RETRIEVER_CACHE.pop(key).close()
 

@@ -1,4 +1,5 @@
 """RAG pipeline inspection payload for the /api/rag/inspect endpoint."""
+
 from __future__ import annotations
 
 import math
@@ -6,7 +7,7 @@ from pathlib import PurePosixPath
 
 from runnrr import config
 from runnrr.profiles import AgentProfile
-from runnrr.rag.indexer import VECTOR_FILENAME, default_index_dir
+from runnrr.rag.indexer import VECTOR_FILENAME, default_index_dir, resolve_index_dir
 from runnrr.rag.pca import load_pca_sidecar, project_query
 from runnrr.rag.retriever import (
     DEFAULT_RRF_K,
@@ -17,7 +18,6 @@ from runnrr.rag.retriever import (
 from runnrr.rag.tools import _snippet
 from runnrr.rag.vector_index import VectorIndex
 from runnrr.tools.source_metadata import label_from_kb_path
-
 
 # Bm25Index.search returns exp(-factor * raw) so LOWER is better; invert it back
 # to the raw Okapi score for display, where higher = more relevant.
@@ -55,7 +55,7 @@ def inspect_payload(profile: AgentProfile, query: str, k: int) -> dict:
     retriever = get_retriever_for_profile(profile)
     signals = retriever.search_with_signals(query, k=k, candidate_k=pool)
 
-    index_dir = default_index_dir(profile)
+    index_dir = resolve_index_dir(default_index_dir(profile))
     vector_path = index_dir / VECTOR_FILENAME
     vector = VectorIndex(vector_path, dim=retriever.embedding.dim)
     try:
@@ -109,9 +109,7 @@ def inspect_payload(profile: AgentProfile, query: str, k: int) -> dict:
         "backend": retriever.embedding.backend,
         "model": retriever.embedding.model,
         "dim": retriever.embedding.dim,
-        "preview": [
-            round(v, 4) for v in signals.query_embedding[:preview_len]
-        ],
+        "preview": [round(v, 4) for v in signals.query_embedding[:preview_len]],
     }
 
     pca = load_pca_sidecar(index_dir)
@@ -127,12 +125,8 @@ def inspect_payload(profile: AgentProfile, query: str, k: int) -> dict:
         map_block = {"available": False}
 
     retrieved_tokens = sum(r.chunk.tokens_est for r in signals.fused)
-    retrieved_pct = (
-        round(retrieved_tokens / kb_tokens * 100, 2) if kb_tokens else 0.0
-    )
-    total_ms = round(
-        sum(signals.timings[k] for k in ("embed_ms", "bm25_ms", "vector_ms")), 1
-    )
+    retrieved_pct = round(retrieved_tokens / kb_tokens * 100, 2) if kb_tokens else 0.0
+    total_ms = round(sum(signals.timings[k] for k in ("embed_ms", "bm25_ms", "vector_ms")), 1)
 
     return {
         "profile_id": profile.id,

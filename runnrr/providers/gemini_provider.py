@@ -1,4 +1,5 @@
 """Gemini provider using Google's official google-genai SDK."""
+
 from __future__ import annotations
 
 import os
@@ -23,7 +24,10 @@ class GeminiProvider:
         self.client = client or genai.Client(
             api_key=os.environ[api_key_env],
             # google-genai takes the timeout in milliseconds.
-            http_options=types.HttpOptions(timeout=int(PROVIDER_TIMEOUT_SECONDS * 1000), retry_options=types.HttpRetryOptions(attempts=1)),
+            http_options=types.HttpOptions(
+                timeout=int(PROVIDER_TIMEOUT_SECONDS * 1000),
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
         )
 
     def format_user(self, text: str) -> ProviderMessage:
@@ -117,6 +121,9 @@ class GeminiProvider:
                     # same workload reported differently than on Anthropic.
                     yield {"type": "tool_use_start", "name": name}
 
+        if finish_reason in _BLOCKED_FINISHES or finish_reason == "MAX_TOKENS":
+            function_parts = []
+
         model_parts = []
         if text_parts:
             model_parts.append(types.Part.from_text(text="".join(text_parts)))
@@ -185,19 +192,11 @@ def _chunk_parts(chunk: Any) -> list[Any]:
 
 
 def _norm_usage(u: Any) -> UsagePayload:
-    # Gemini already satisfies runnrr/usage.py's contract natively, so unlike
-    # the other two providers this function does no arithmetic. Do not "fix" it:
-    #
-    #   total = prompt_token_count + candidates_token_count + thoughts_token_count
-    #
-    # Thoughts are ALREADY disjoint from candidates, so subtracting reasoning out
-    # of output here (as Anthropic and OpenAI must, because their APIs roll it in)
-    # would double-discount it. And cached_content_token_count is already a subset
-    # of prompt_token_count, which is exactly the semantics the contract wants.
-    # Pinned by test_gemini_reasoning_disjoint_from_output.
+    # Gemini reports thoughts separately; normalize to inclusive output.
     return {
         "input_tokens": getattr(u, "prompt_token_count", 0) or 0,
-        "output_tokens": getattr(u, "candidates_token_count", 0) or 0,
+        "output_tokens": (getattr(u, "candidates_token_count", 0) or 0)
+        + (getattr(u, "thoughts_token_count", 0) or 0),
         "reasoning_tokens": getattr(u, "thoughts_token_count", 0) or 0,
         "cache_read_input_tokens": getattr(u, "cached_content_token_count", 0) or 0,
         "cache_creation_input_tokens": 0,

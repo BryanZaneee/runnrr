@@ -1,7 +1,7 @@
 {
   "id": "personal-agent",
-  "label": "Personal Agent",
-  "description": "Personal candidate-advocate agent for Bryan Zane Smith.",
+  "label": "Bryan's Experience Guide",
+  "description": "Get to know Bryan Zane Smith: his experience, projects, technical skills, education, and career background.",
   "kb_root": "kb",
   "system_prompt_path": "profiles/personal-agent/system.md",
   "tools": [
@@ -14,8 +14,8 @@
     "web_search"
   ],
   "tool_descriptions": {
-    "get_resume_summary": "Return Bryan's resume in markdown. Use for any question about employment history, education, certifications, or overall qualifications — faster than read_file('resume/resume.md').",
-    "get_project_context": "Return a curated PITCH summary for one of Bryan's projects (the 'why it matters' angle). Use when a recruiter asks about a specific project — answers like 'tell me about X' or 'is X relevant to Y role'. For technical detail (stack, key files, architecture), the system context already includes a quick_info cheat sheet — no tool call needed for that."
+    "get_resume_summary": "Return Bryan's resume in markdown. Use for any question about employment history, education, certifications, or overall qualifications \u2014 faster than read_file('resume/resume.md').",
+    "get_project_context": "Read maintainer notes and the latest public website/GitHub snapshot for a named project. Use for current product features, stack, and project relevance; cite the dated source and do not infer personal contributions from repository activity."
   },
   "project_aliases": {
     "bryanzane.com": "bryanzane-com",
@@ -30,35 +30,67 @@
     "esmebelle": "esme",
     "esmebelle.studio": "esme",
     "esme belle": "esme",
-    "esmé belle": "esme",
+    "esm\u00e9 belle": "esme",
     "ayopapo.studio": "ayopapo",
     "ayo papo": "ayopapo",
-    "papo": "ayopapo"
+    "papo": "ayopapo",
+    "easyagent": "runnrr",
+    "easy agent": "runnrr",
+    "strauss": "runnrr",
+    "runnrr": "runnrr",
+    "anyplace": "anywhere",
+    "bryanzane_v3": "bryanzane-com",
+    "00jordie": "jordie",
+    "00jordie-epk": "jordie",
+    "community voices": "community-voices",
+    "code atlas": "code-atlas",
+    "sendaway": "ftrmsg"
   },
   "source_labels": {
-    "anywhere": "Anywhere",
+    "anywhere": "Anyplace",
     "ayopapo": "Ayopapo",
     "bryanzane-com": "Bryanzane.com",
     "esme": "Esme",
-    "ftrmsg": "Ftrmsg",
+    "ftrmsg": "FTRMSG",
     "infinichat": "Infinichat",
     "llmbench": "LLM Bench",
     "physiq": "Physiq",
     "shuttrr": "Shuttrr",
-    "widget": "Widget"
+    "widget": "Widget",
+    "runnrr": "Runnrr",
+    "code-atlas": "Code Atlas",
+    "community-voices": "Community Voices",
+    "labelcheck": "Labelcheck",
+    "terra": "Terra",
+    "sendaway": "Sendaway",
+    "jordie": "00JORDIE",
+    "pomopaint": "PomoPaint"
   },
   "source_path_labels": [
-    ["resume/resume.md", "Resume"],
-    ["codebases/", "Codebase reference"],
-    ["meta/", "Portfolio knowledge base"]
+    [
+      "resume/resume.md",
+      "Resume"
+    ],
+    [
+      "codebases/",
+      "Codebase reference"
+    ],
+    [
+      "meta/",
+      "Portfolio knowledge base"
+    ],
+    [
+      "github/",
+      "Public project snapshot"
+    ]
   ],
   "brand": {
     "accent": "#386f3d",
     "accent_dark": "#1f4d28",
     "accent_soft": "#e8f3e6",
     "hero_icon": " (...)\n  ^^\n /--\\",
-    "intro_ascii_name": " ____                                 _    _                    _   \n|  _ \\ ___ _ __ ___  ___  _ __   __ _| |  / \\   __ _  ___ _ __ | |_ \n| |_) / _ \\ '__/ __|/ _ \\| '_ \\ / _` | | / _ \\ / _` |/ _ \\ '_ \\| __|\n|  __/  __/ |  \\__ \\ (_) | | | | (_| | |/ ___ \\ (_| |  __/ | | | |_ \n|_|   \\___|_|  |___/\\___/|_| |_|\\__,_|_/_/   \\_\\__, |\\___|_| |_|\\__|\n                                                |___/               ",
-    "input_placeholder": "ask Personal Agent about Bryan..."
+    "intro_ascii_name": "Bryan's Experience Guide",
+    "input_placeholder": "Ask about Bryan's experience, projects, or skills..."
   },
   "welcome": "I answer questions about Bryan grounded in his resume and codebases. I won't make things up; if a fact isn't there, I'll say so.",
   "suggestions": [

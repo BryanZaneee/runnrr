@@ -93,10 +93,7 @@ def test_semantic_search_requires_active_profile(sqlite_vec_available) -> None:
     )
 
     assert result.is_error is True
-    assert (
-        json.loads(result.content)["error"]
-        == "semantic_search_kb requires an active profile"
-    )
+    assert json.loads(result.content)["error"] == "semantic_search_kb requires an active profile"
 
 
 def test_semantic_search_respects_profile_allowlist(

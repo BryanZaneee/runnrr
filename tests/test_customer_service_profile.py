@@ -1,4 +1,5 @@
 """Tests for the bundled customer-service profile and the /api/profiles endpoint."""
+
 from __future__ import annotations
 
 import importlib
@@ -29,7 +30,7 @@ def test_personal_agent_profile_brand_loads():
     p = load_profile("personal-agent")
     assert p.brand["accent"] == "#386f3d"
     assert p.brand["intro_ascii_name"]
-    assert "Personal Agent" in p.brand["input_placeholder"]
+    assert "Bryan's experience" in p.brand["input_placeholder"]
     assert p.data_root is None
 
 
@@ -118,20 +119,24 @@ def test_mcp_servers_field_round_trips(tmp_path, monkeypatch):
     (profile_dir / "data").mkdir()
 
     (profile_dir / "system.md").write_text("test prompt")
-    (profile_dir / "profile.json").write_text(json.dumps({
-        "id": "fixture-cs",
-        "label": "Fixture CS",
-        "description": "MCP round-trip test profile",
-        "kb_root": "kb",
-        "system_prompt_path": str(profile_dir / "system.md"),
-        "tools": ["search_kb"],
-        "brand": {"accent": "#123456"},
-        "data_root": str(profile_dir / "data"),
-        "mcp_servers": [
-            {"name": "calendar", "command": "npx", "args": ["-y", "@x/cal"], "env": {}},
-            {"name": "crm", "command": "/usr/bin/foo", "args": [], "env": {"K": "v"}},
-        ],
-    }))
+    (profile_dir / "profile.json").write_text(
+        json.dumps(
+            {
+                "id": "fixture-cs",
+                "label": "Fixture CS",
+                "description": "MCP round-trip test profile",
+                "kb_root": "kb",
+                "system_prompt_path": str(profile_dir / "system.md"),
+                "tools": ["search_kb"],
+                "brand": {"accent": "#123456"},
+                "data_root": str(profile_dir / "data"),
+                "mcp_servers": [
+                    {"name": "calendar", "command": "npx", "args": ["-y", "@x/cal"], "env": {}},
+                    {"name": "crm", "command": "/usr/bin/foo", "args": [], "env": {"K": "v"}},
+                ],
+            }
+        )
+    )
 
     from runnrr import profiles as profiles_mod
 
@@ -192,11 +197,13 @@ def test_api_profile_includes_allowed_tool_schemas(client):
     schemas = body["tool_schemas"]
     assert [schema["name"] for schema in schemas] == body["tools"]
     assert schemas[0]["input_schema"]["type"] == "object"
-    assert {schema["name"] for schema in schemas}.isdisjoint({
-        "get_resume_summary",
-        "get_project_context",
-        "web_search",
-    })
+    assert {schema["name"] for schema in schemas}.isdisjoint(
+        {
+            "get_resume_summary",
+            "get_project_context",
+            "web_search",
+        }
+    )
 
 
 def test_api_profile_skips_missing_tool_schemas(client, monkeypatch, tmp_path):

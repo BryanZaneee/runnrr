@@ -1,4 +1,5 @@
 """Unit tests for eval graders (no network, no API keys)."""
+
 from __future__ import annotations
 
 import pytest
@@ -57,9 +58,7 @@ def test_llm_grader_injected_grade_fn():
 
 
 def test_score_clamp_and_missing_score():
-    assert graders._score_from({"score": 99, "reasoning": "high"})[0] == pytest.approx(
-        1.0
-    )
+    assert graders._score_from({"score": 99, "reasoning": "high"})[0] == pytest.approx(1.0)
     assert graders._score_from({}) == (0.0, "grader returned no score")
     assert graders._score_from("x") == (0.0, "grader returned no score")
 

@@ -1,28 +1,35 @@
 # Roadmap
 
-Deferred features, one file each, in the order they are expected to land. Each
-file is either a folded design doc from a former draft PR (#11–#18, closed) with
-its contract-test docstrings as an acceptance list, or a short placeholder.
+This is the current implementation sequence. Plans in `../plans/archive/` are
+historical and do not authorize deleting active profiles or APIs.
 
-The executable plan lives in [`../plans/runnrr-analysis.md`](../plans/runnrr-analysis.md)
-(§5, PR sequence). Where a roadmap file and the plan disagree, the plan wins.
+## Finishing the current workstation
 
-Order:
+The local workstation, inclusive usage accounting, persistent usage dashboard,
+owner-scoped project imports, and public portfolio refresh are implemented.
+Their local integration checks cover concurrency, failure, and browser behavior.
+Deployment and live-service verification remain separate. See
+[maintenance results](../maintenance.md).
 
-1. `supabase-auth` — seed: `backend/auth.py` from PR #2 (PyJWT HS256, `require_user`, `optional_user`). Plan P3b.
-2. `durable-sessions` — plan P3a.
-3. `audit-kill-switch` — plan P3c.
-4. `hitl` — plan P3d.
-5. `channel-webhooks` — plan P8 (Telegram first, then Twilio SMS from this doc).
-6. `channel-voice`
-7. `calendar-crm` — first `requires_approval=True` tools.
-8. `mcp-runtime` — plan P7.
-9. `dlp-redact`
-10. `group-management` — Supabase `orgs/memberships/roles` + invites; a role claim check in `require_user`.
-11. `serve-ui-from-runtime` — plan P4 (`app.mount("/", StaticFiles(...))`).
-12. `mac-packaging` — installer / menubar wrapper around `runnrr up`.
-13. `cloud-provisioning` — one container per customer on the VPS; the frozen `Caddyfile` (tag `ed536ff`) has the Sidekick per-user container blocks as prior art.
-14. `model-config-file` — `models.json` replacing `MODEL_REGISTRY` + pricing; add per-model minimum cacheable tokens and DeepSeek peak/off-peak rates.
-15. `docker-sandbox` — swap `workspace._spawn()` for `docker run --rm -v ws:/work --network none`; bwrap/Seatbelt as the lighter option.
+## Proposed next delivery sequence
 
-Also deferred (no file yet): agent-management-api (plan P6), agent-memory (P5a), capabilities-model (P5b), cron-and-artifacts (P5c), network egress allowlist proxy, browser-automation, rooms/A2A, skills-hub, escalation routing (cheap default → Sonnet on hop cap / repeated tool errors), evals-generalization (tool trajectories, pass^3), pre-compaction memory flush, hooks registry, deferred tool loading, developer CLI (`runnrr chat` REPL).
+These are candidates for the owner to prioritize, defer, or abandon; none is
+automatically authorized by committing the current work.
+
+1. Durable sessions: persist messages and recover interrupted turns; preserve
+   exact profile/model/project binding and test restart recovery.
+2. Authentication and ownership: protect sessions, projects, and usage per user;
+   migrate browser workspace keys without losing existing projects.
+3. Approvals and audit: persist pending actions, enforce decisions server-side,
+   add cancellation and an operator kill switch before external write tools.
+4. Writable workspaces and artifacts: path containment, quotas, previews, and
+   downloads; establish isolation before executing arbitrary tools.
+5. Support integrations: verified inbound events, idempotent thread routing,
+   draft replies, and human approval before sending customer messages.
+6. MCP and installed-agent adapters: explicit capability contracts, lifecycle
+   handling, and permission propagation.
+7. Scheduling, memory, delegation, and voice follow those foundations.
+
+The individual documents here retain design notes and acceptance ideas. Serving
+UI from the runtime is already complete. These future items are not claims of
+current functionality. Deployment remains a separate manual operation.

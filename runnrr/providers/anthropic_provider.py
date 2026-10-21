@@ -1,4 +1,5 @@
 """Anthropic provider — streaming tool-use loop, mirroring notebook 003/009."""
+
 from __future__ import annotations
 
 import json
@@ -14,7 +15,6 @@ from runnrr.providers.base import Event
 from runnrr.tools import ToolResult, schemas_for_tools
 from runnrr.types import ProviderMessage, UsagePayload
 
-
 # Anthropic is the only provider with a request-side cache control; OpenAI,
 # DeepSeek, Kimi, and Gemini all cache implicitly with nothing to send. That
 # asymmetry is why the provider itself is the gate here rather than a registry
@@ -24,17 +24,13 @@ _EPHEMERAL = {"type": "ephemeral"}
 
 
 class AnthropicProvider:
-    def __init__(
-        self, *, thinking_budget: int | None = None, client: Any | None = None
-    ) -> None:
+    def __init__(self, *, thinking_budget: int | None = None, client: Any | None = None) -> None:
         # `client=` matches OpenAICompatProvider and GeminiProvider. Anthropic
         # lacked it, which is why Anthropic streaming was the one untested path.
         self.client = client or AsyncAnthropic(
             api_key=os.environ["ANTHROPIC_API_KEY"],
             timeout=PROVIDER_TIMEOUT_SECONDS,
-            # The SDK honours Retry-After on 429/5xx. There was no retry at any
-            # level before, so a single rate-limit blip surfaced to the user as a
-            # generic "model provider error".
+            # Each paid attempt needs its own reservation; disable hidden SDK retries.
             max_retries=0,
         )
         # When set, enable extended thinking with this budget. The API requires
@@ -137,9 +133,20 @@ class AnthropicProvider:
 
         # The assistant turn (including tool_use blocks) must land in the message log
         # before the next turn's tool_result blocks. Otherwise the API rejects the next call.
-        messages.append({"role": "assistant", "content": response.content})
+        stop_reason = {
+            "tool_use": "tool_use",
+            "end_turn": "end_turn",
+            "stop_sequence": "end_turn",
+            "max_tokens": "max_tokens",
+        }.get(response.stop_reason, "blocked")
+        content = [
+            block
+            for block in response.content
+            if block.type != "tool_use" or stop_reason == "tool_use"
+        ]
+        messages.append({"role": "assistant", "content": content})
 
-        for block in response.content:
+        for block in content:
             if block.type == "tool_use":
                 yield {
                     "type": "tool_use_complete",
@@ -154,7 +161,7 @@ class AnthropicProvider:
         yield {"type": "usage", "usage": _norm_usage(response.usage, thinking_tokens=thinking_est)}
         yield {
             "type": "message_done",
-            "stop_reason": "tool_use" if response.stop_reason == "tool_use" else "end_turn",
+            "stop_reason": stop_reason,
         }
 
 
@@ -184,8 +191,7 @@ def _estimate_thinking_tokens(content: list, total_output_tokens: int) -> int:
 def _norm_usage(u: Any, thinking_tokens: int = 0) -> UsagePayload:
     # Anthropic streaming usage rolls extended-thinking tokens into output_tokens
     # without a per-stream split. When thinking_tokens is supplied (estimated from
-    # content-block character lengths), expose it on reasoning_tokens and subtract
-    # it from output_tokens so the two are disjoint and the frontend can sum them.
+    # content-block character lengths), expose it as a subset of output_tokens.
     output_total = getattr(u, "output_tokens", 0) or 0
     reasoning = max(0, min(thinking_tokens, output_total))
 
@@ -198,7 +204,7 @@ def _norm_usage(u: Any, thinking_tokens: int = 0) -> UsagePayload:
     cache_creation = getattr(u, "cache_creation_input_tokens", 0) or 0
     return {
         "input_tokens": (getattr(u, "input_tokens", 0) or 0) + cache_read + cache_creation,
-        "output_tokens": output_total - reasoning,
+        "output_tokens": output_total,
         "reasoning_tokens": reasoning,
         # Anthropic exposes no per-block token split, so reasoning_tokens above is
         # apportioned by character length rather than measured. Flag it: the same

@@ -6,6 +6,7 @@ Anthropic-course/005_hybrid.ipynb), then within long sections uses a
 (rel_path, start_line, end_line) so the same input always produces the same
 IDs, which keeps re-index diffs surgical.
 """
+
 from __future__ import annotations
 
 import hashlib

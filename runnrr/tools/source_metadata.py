@@ -1,4 +1,5 @@
 """Source metadata helpers for tool results."""
+
 from __future__ import annotations
 
 import re
@@ -119,11 +120,13 @@ def _kb_search_metadata(
     path_labels: Sequence[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     matches = matches if isinstance(matches, list) else []
-    items = _unique_items([
-        _source_item(label_from_kb_path(str(item.get("path", "")), labels, path_labels), kind)
-        for item in matches
-        if isinstance(item, dict)
-    ])
+    items = _unique_items(
+        [
+            _source_item(label_from_kb_path(str(item.get("path", "")), labels, path_labels), kind)
+            for item in matches
+            if isinstance(item, dict)
+        ]
+    )
     visible, hidden = _cap_items(items)
     match_label = "match" if len(matches) == 1 else "matches"
     source_label = "source" if len(items) == 1 else "sources"
@@ -194,23 +197,15 @@ def semantic_search_metadata(
         labels=labels,
         path_labels=path_labels,
     )
-    trace_results = (
-        context.scratch.get("rag_trace_results") if context is not None else None
-    )
+    trace_results = context.scratch.get("rag_trace_results") if context is not None else None
     if trace_results:
         entries = [
             {
-                "label": _clean_label(
-                    label_from_kb_path(r.chunk.path, labels, path_labels)
-                ),
+                "label": _clean_label(label_from_kb_path(r.chunk.path, labels, path_labels)),
                 "score": round(r.score, 4),
-                "bm25_score": round(r.bm25_score, 3)
-                if r.bm25_score is not None
-                else None,
+                "bm25_score": round(r.bm25_score, 3) if r.bm25_score is not None else None,
                 "bm25_rank": r.bm25_rank,
-                "vector_score": round(r.vector_score, 4)
-                if r.vector_score is not None
-                else None,
+                "vector_score": round(r.vector_score, 4) if r.vector_score is not None else None,
                 "vector_rank": r.vector_rank,
                 "tokens": r.chunk.tokens_est,
             }

@@ -33,3 +33,8 @@ repomix-output.xml
 
 # Local visual QA artifacts.
 /tmp/
+
+# JavaScript development tools and browser reports.
+node_modules/
+playwright-report/
+test-results/

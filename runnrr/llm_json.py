@@ -1,4 +1,5 @@
 """Structured JSON via Anthropic sync client (prefill + stop at closing fence)."""
+
 from __future__ import annotations
 
 import json
@@ -7,8 +8,8 @@ from typing import Any
 
 from anthropic import Anthropic
 
-from runnrr.budget import reserve_paid_call
 from runnrr import config
+from runnrr.budget import reserve_paid_call
 from runnrr.config import MODEL_REGISTRY
 
 
@@ -26,9 +27,7 @@ def complete_json(
     resolved = model_id or config.GRADER_MODEL_ID
     model = MODEL_REGISTRY[resolved]["model"]
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise LLMJsonError(
-            "ANTHROPIC_API_KEY required for LLM JSON grading/reranking"
-        )
+        raise LLMJsonError("ANTHROPIC_API_KEY required for LLM JSON grading/reranking")
     try:
         client = Anthropic(max_retries=0)
         messages = [
@@ -45,9 +44,7 @@ def complete_json(
             kwargs["system"] = [{"type": "text", "text": system}]
         reserve_paid_call(f"llm:{model}")
         resp = client.messages.create(**kwargs)
-        text = "".join(
-            b.text for b in resp.content if getattr(b, "type", None) == "text"
-        )
+        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
         return json.loads(text.strip())
     except json.JSONDecodeError as exc:
         raise LLMJsonError(f"invalid JSON from model: {exc}") from exc

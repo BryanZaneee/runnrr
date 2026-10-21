@@ -1,4 +1,5 @@
 """Tool-facing wrapper around the RAG retriever."""
+
 from __future__ import annotations
 
 import re
@@ -11,7 +12,7 @@ from runnrr.tool_errors import ToolExecutionError
 
 if TYPE_CHECKING:
     from runnrr.rag.embeddings import EmbeddingProvider
-    from runnrr.tools.definitions import ToolDef
+    from runnrr.tools.definitions import ToolContext, ToolDef
 
 SNIPPET_CHARS = 400
 

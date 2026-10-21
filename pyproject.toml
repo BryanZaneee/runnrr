@@ -1,7 +1,7 @@
 [project]
 name = "runnrr"
 version = "0.1.0"
-description = "Runnrr — self-hosted business-task agent runtime: one runtime per business, a sandbox workspace per agent, Supabase login, Anthropic/OpenAI/DeepSeek/Kimi providers."
+description = "Self-hosted agent workstation for customer support, research, and business workflows."
 readme = "README.md"
 # voyageai (default RAG backend) does not support Python 3.14+ yet.
 requires-python = ">=3.11,<3.14"
@@ -30,6 +30,7 @@ rag-local = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    "ruff>=0.17.1",
 ]
 
 [tool.ruff]
@@ -37,6 +38,8 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+# Long URLs, prompts, and test fixtures are not usefully split by a lint rule.
+ignore = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

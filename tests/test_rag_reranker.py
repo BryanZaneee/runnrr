@@ -7,7 +7,7 @@ from runnrr.profiles import AgentProfile
 from runnrr.rag.chunker import chunk_markdown
 from runnrr.rag.embeddings import FakeEmbeddingProvider
 from runnrr.rag.indexer import Indexer
-from runnrr.rag.reranker import LLMReranker, RERANK_CANDIDATES
+from runnrr.rag.reranker import RERANK_CANDIDATES, LLMReranker
 from runnrr.rag.retriever import RetrievalResult
 from runnrr.rag.tools import semantic_search_kb
 
@@ -19,9 +19,7 @@ def _results_from_markdown() -> list[RetrievalResult]:
         "# Three\n\nThird about gamma.",
     )
     assert len(chunks) >= 3
-    return [
-        RetrievalResult(chunk=c, score=1.0 - i * 0.1) for i, c in enumerate(chunks[:3])
-    ]
+    return [RetrievalResult(chunk=c, score=1.0 - i * 0.1) for i, c in enumerate(chunks[:3])]
 
 
 def test_rerank_reorders_by_injected_scores() -> None:
@@ -35,9 +33,7 @@ def test_rerank_reorders_by_injected_scores() -> None:
             {"chunk_id": results[1].chunk.chunk_id, "relevance": 2},
         ]
 
-    reranked = LLMReranker(complete_fn=complete_fn).rerank(
-        "gamma topic", results, top_k=3
-    )
+    reranked = LLMReranker(complete_fn=complete_fn).rerank("gamma topic", results, top_k=3)
     assert reranked[0].chunk.chunk_id == last_id
     assert len(reranked) == 3
 
@@ -49,9 +45,7 @@ def test_rerank_falls_back_on_complete_fn_error() -> None:
         raise RuntimeError("api down")
 
     out = LLMReranker(complete_fn=boom).rerank("q", results, top_k=3)
-    assert [r.chunk.chunk_id for r in out] == [
-        r.chunk.chunk_id for r in results[:3]
-    ]
+    assert [r.chunk.chunk_id for r in out] == [r.chunk.chunk_id for r in results[:3]]
 
 
 def test_rerank_falls_back_on_malformed_json() -> None:
@@ -61,9 +55,7 @@ def test_rerank_falls_back_on_malformed_json() -> None:
         return {"not": "an array"}
 
     out = LLMReranker(complete_fn=bad).rerank("q", results, top_k=3)
-    assert [r.chunk.chunk_id for r in out] == [
-        r.chunk.chunk_id for r in results[:3]
-    ]
+    assert [r.chunk.chunk_id for r in out] == [r.chunk.chunk_id for r in results[:3]]
 
 
 def test_rerank_respects_top_k() -> None:
@@ -78,15 +70,13 @@ def test_rerank_respects_top_k() -> None:
 
     out = LLMReranker(complete_fn=complete_fn).rerank("q", results, top_k=2)
     assert len(out) == 2
-    assert [r.chunk.chunk_id for r in out] == [
-        r.chunk.chunk_id for r in results[:2]
-    ]
+    assert [r.chunk.chunk_id for r in out] == [r.chunk.chunk_id for r in results[:2]]
 
 
 def test_semantic_search_honors_rerank_enabled(tmp_path, monkeypatch) -> None:
     pytest.importorskip("sqlite_vec")
-    from pathlib import Path
     import shutil
+    from pathlib import Path
 
     mini = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
     kb = tmp_path / "mini_rag_kb"

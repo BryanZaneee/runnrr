@@ -4,12 +4,15 @@ One file per profile under profiles/<id>/.index/index.sqlite. Stores embeddings
 in a vec0 virtual table and chunk metadata + content in a sibling regular table
 so retrieval needs no second lookup.
 """
+
 from __future__ import annotations
 
 import json
 import sqlite3
 import struct
+from contextlib import contextmanager
 from pathlib import Path
+from threading import RLock
 from typing import Iterable
 
 from runnrr.rag.chunker import Chunk
@@ -49,18 +52,23 @@ class VectorIndex:
     """
 
     def __init__(self, db_path: Path | str, dim: int):
-        self.db_path = (
-            str(db_path) if db_path != ":memory:" else ":memory:"
-        )
+        self.db_path = str(db_path) if db_path != ":memory:" else ":memory:"
         self.dim = dim
         self._conn: sqlite3.Connection | None = None
+        self._lock = RLock()
+
+    @contextmanager
+    def _connection(self):
+        # Tool workers share this cached index; serialize connection use and transactions.
+        with self._lock:
+            yield self._connect()
 
     def _connect(self) -> sqlite3.Connection:
         if self._conn is not None:
             return self._conn
         if self.db_path != ":memory:":
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         try:
             _load_sqlite_vec(conn)
@@ -95,12 +103,14 @@ class VectorIndex:
 
     def ensure_schema(self) -> None:
         """Open the database and create the vector schema if needed."""
-        self._connect()
+        with self._connection():
+            pass
 
     def close(self) -> None:
-        if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+        with self._lock:
+            if self._conn is not None:
+                self._conn.close()
+                self._conn = None
 
     def add(self, chunk: Chunk, embedding: list[float]) -> None:
         self.add_documents([(chunk, embedding)])
@@ -110,17 +120,15 @@ class VectorIndex:
         chunks: Iterable[tuple[Chunk, list[float]]],
     ) -> int:
         """Add a batch of (chunk, embedding) pairs. Returns count written."""
-        conn = self._connect()
-        count = 0
-        with conn:
-            for chunk, embedding in chunks:
-                if len(embedding) != self.dim:
-                    raise ValueError(
-                        f"embedding dim {len(embedding)} != index dim {self.dim}"
-                    )
-                self._upsert(conn, chunk, embedding)
-                count += 1
-        return count
+        with self._connection() as conn:
+            count = 0
+            with conn:
+                for chunk, embedding in chunks:
+                    if len(embedding) != self.dim:
+                        raise ValueError(f"embedding dim {len(embedding)} != index dim {self.dim}")
+                    self._upsert(conn, chunk, embedding)
+                    count += 1
+            return count
 
     def _upsert(
         self,
@@ -188,19 +196,15 @@ class VectorIndex:
 
     def delete_by_path(self, rel_path: str) -> int:
         """Remove all chunks whose path matches. Returns count deleted."""
-        conn = self._connect()
-        rows = conn.execute(
-            "SELECT rowid FROM chunks WHERE path = ?", (rel_path,)
-        ).fetchall()
-        rowids = [r[0] for r in rows]
-        if not rowids:
-            return 0
-        with conn:
-            conn.executemany(
-                "DELETE FROM vec_chunks WHERE rowid = ?", [(r,) for r in rowids]
-            )
-            conn.execute("DELETE FROM chunks WHERE path = ?", (rel_path,))
-        return len(rowids)
+        with self._connection() as conn:
+            rows = conn.execute("SELECT rowid FROM chunks WHERE path = ?", (rel_path,)).fetchall()
+            rowids = [r[0] for r in rows]
+            if not rowids:
+                return 0
+            with conn:
+                conn.executemany("DELETE FROM vec_chunks WHERE rowid = ?", [(r,) for r in rowids])
+                conn.execute("DELETE FROM chunks WHERE path = ?", (rel_path,))
+            return len(rowids)
 
     def search(
         self,
@@ -210,63 +214,61 @@ class VectorIndex:
         if k <= 0:
             raise ValueError("k must be a positive integer.")
         if len(query_embedding) != self.dim:
-            raise ValueError(
-                f"query dim {len(query_embedding)} != index dim {self.dim}"
-            )
-        conn = self._connect()
-        rows = conn.execute(
-            """
-            SELECT v.rowid AS rowid, v.distance AS distance,
-                   c.chunk_id, c.path, c.heading_path,
-                   c.start_line, c.end_line, c.content, c.tokens_est
-            FROM vec_chunks v
-            JOIN chunks c ON c.rowid = v.rowid
-            WHERE v.embedding MATCH ? AND k = ?
-            ORDER BY v.distance
-            """,
-            (_serialize_f32(query_embedding), k),
-        ).fetchall()
-        out: list[tuple[Chunk, float]] = []
-        for row in rows:
-            out.append((self._chunk_from_row(row), float(row["distance"])))
-        return out
+            raise ValueError(f"query dim {len(query_embedding)} != index dim {self.dim}")
+        with self._connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT v.rowid AS rowid, v.distance AS distance,
+                       c.chunk_id, c.path, c.heading_path,
+                       c.start_line, c.end_line, c.content, c.tokens_est
+                FROM vec_chunks v
+                JOIN chunks c ON c.rowid = v.rowid
+                WHERE v.embedding MATCH ? AND k = ?
+                ORDER BY v.distance
+                """,
+                (_serialize_f32(query_embedding), k),
+            ).fetchall()
+            out: list[tuple[Chunk, float]] = []
+            for row in rows:
+                out.append((self._chunk_from_row(row), float(row["distance"])))
+            return out
 
     def all_embeddings(self) -> list[tuple[Chunk, list[float]]]:
-        conn = self._connect()
-        rows = conn.execute(
-            """
-            SELECT c.chunk_id, c.path, c.heading_path,
-                   c.start_line, c.end_line, c.content, c.tokens_est,
-                   v.embedding AS embedding
-            FROM chunks c
-            JOIN vec_chunks v ON c.rowid = v.rowid
-            ORDER BY c.chunk_id
-            """
-        ).fetchall()
-        out: list[tuple[Chunk, list[float]]] = []
-        for row in rows:
-            embedding = list(struct.unpack(f"{self.dim}f", row["embedding"]))
-            out.append((self._chunk_from_row(row), embedding))
-        return out
+        with self._connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT c.chunk_id, c.path, c.heading_path,
+                       c.start_line, c.end_line, c.content, c.tokens_est,
+                       v.embedding AS embedding
+                FROM chunks c
+                JOIN vec_chunks v ON c.rowid = v.rowid
+                ORDER BY c.chunk_id
+                """
+            ).fetchall()
+            out: list[tuple[Chunk, list[float]]] = []
+            for row in rows:
+                embedding = list(struct.unpack(f"{self.dim}f", row["embedding"]))
+                out.append((self._chunk_from_row(row), embedding))
+            return out
 
     def embeddings_for(self, chunk_ids: list[str]) -> dict[str, list[float]]:
         if not chunk_ids:
             return {}
-        conn = self._connect()
-        placeholders = ",".join("?" * len(chunk_ids))
-        rows = conn.execute(
-            f"""
-            SELECT c.chunk_id, v.embedding AS embedding
-            FROM chunks c
-            JOIN vec_chunks v ON c.rowid = v.rowid
-            WHERE c.chunk_id IN ({placeholders})
-            """,
-            chunk_ids,
-        ).fetchall()
-        return {
-            row["chunk_id"]: list(struct.unpack(f"{self.dim}f", row["embedding"]))
-            for row in rows
-        }
+        with self._connection() as conn:
+            placeholders = ",".join("?" * len(chunk_ids))
+            rows = conn.execute(
+                f"""
+                SELECT c.chunk_id, v.embedding AS embedding
+                FROM chunks c
+                JOIN vec_chunks v ON c.rowid = v.rowid
+                WHERE c.chunk_id IN ({placeholders})
+                """,
+                chunk_ids,
+            ).fetchall()
+            return {
+                row["chunk_id"]: list(struct.unpack(f"{self.dim}f", row["embedding"]))
+                for row in rows
+            }
 
     @staticmethod
     def _chunk_from_row(row: sqlite3.Row) -> Chunk:
@@ -281,11 +283,9 @@ class VectorIndex:
         )
 
     def __len__(self) -> int:
-        conn = self._connect()
-        return conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        with self._connection() as conn:
+            return conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
 
     def total_tokens(self) -> int:
-        conn = self._connect()
-        return conn.execute(
-            "SELECT COALESCE(SUM(tokens_est), 0) FROM chunks"
-        ).fetchone()[0]
+        with self._connection() as conn:
+            return conn.execute("SELECT COALESCE(SUM(tokens_est), 0) FROM chunks").fetchone()[0]

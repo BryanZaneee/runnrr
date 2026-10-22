@@ -61,3 +61,48 @@ durable sessions and restart recovery; authentication/ownership; server-enforced
 approvals and audit; writable workspaces/artifacts; customer-support integrations;
 then MCP and installed-agent adapters, scheduling, memory, delegation, and voice.
 These are future capabilities, not partially working controls in this release.
+
+## Portfolio-demo follow-up
+
+The clarified scope is an employer showcase. Workspace threads now persist in
+SQLite, including drafts, pins, snooze/settled state, transcripts, and completed
+provider context. The browser retains its workspace key rather than transcript
+content. The customer-service panel runs three simulated customers through real
+chat requests and shows their responses and tool activity. The Dark Souls
+project selects the existing local-knowledge assistant with optional web tools.
+
+This supersedes the temporary-thread and enterprise-delivery descriptions above.
+The current [roadmap](roadmap/README.md) distinguishes implemented features from
+remaining demonstration preparation and out-of-scope production integrations.
+No deployment or paid provider calls were made during this follow-up.
+
+Follow-up verification: 450 Python tests passed, one optional-dependency test
+skipped, and 85 browser assertions passed. Ruff, frontend formatting, Node
+assertions/syntax, and whitespace checks passed. Coverage includes saved-context
+recovery, workspace isolation, interrupted-turn rollback, deletion undo,
+reload/shelf behavior, simulated-customer monitoring, failures, and cancellation.
+
+## Repository organization, 2026-10-22
+
+Moved 49 source and test files into focused directories. The tests root now
+contains only package initialization and shared fixtures; Python checks are
+grouped by subsystem, with separate Node unit and browser directories. The web
+root now contains only `index.html`, with scripts in `js/`, styles in `css/`,
+and third-party assets and licenses together in `vendor/`. Imports, asset URLs,
+fixture paths, npm scripts, shell checks, and maintained documentation follow
+the new locations. See the [code map](../README.md#repository-layout).
+
+All six bundled profiles load. Sales Concierge and BZS Concierge are deliberately
+unlisted in the workstation, while research and sales profiles do not require
+local KB folders for their configured tools. No profiles or local data were
+deleted. Builder and evaluation APIs remain supported even though their former
+UI pages were removed. Removed the unused synchronous `end_to_end_record`
+wrapper; the evaluation runner already calls the async implementation. Roadmap
+references to nonexistent contract tests now identify them as proposed coverage.
+
+Verified the moved files against a pre-cleanup snapshot: changes are limited to
+paths and static-asset assertions. The combined pending workstation work and
+cleanup passed 452 Python tests (one optional-dependency skip), 127 browser
+assertions, Node unit/syntax checks, Ruff, Prettier, and whitespace checks.
+Existing AnyIO deprecation and Node localStorage warnings remain. No paid
+provider requests or deployment were performed.

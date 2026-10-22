@@ -4,7 +4,11 @@
   "description": "Sourced research agent for public-web discovery, page inspection, and numeric comparison.",
   "kb_root": "profiles/research-analyst/kb",
   "system_prompt_path": "profiles/research-analyst/system.md",
-  "tools": ["web_search", "fetch_url_text", "calculator"],
+  "tools": [
+    "web_search",
+    "fetch_url_text",
+    "calculator"
+  ],
   "mcp_servers": [],
   "brand": {
     "accent": "#2f7de1",

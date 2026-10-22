@@ -11,7 +11,7 @@ from runnrr.rag.embeddings import FakeEmbeddingProvider
 from runnrr.rag.indexer import Indexer
 from runnrr.tools import run_tool
 
-MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
+MINI_RAG_FIXTURE = (Path(__file__).parents[1] / "fixtures" / "mini_rag_kb").resolve()
 
 
 @pytest.fixture

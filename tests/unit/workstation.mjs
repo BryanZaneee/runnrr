@@ -1,6 +1,6 @@
-// Run: node tests/workstation.mjs. No browser or model keys required.
+// Run: node tests/unit/workstation.mjs. No browser or model keys required.
 import assert from 'node:assert/strict';
-import { readEvents, applyEvent, safeUrl } from '../web/chat.mjs';
+import { readEvents, applyEvent, safeUrl } from '../../web/js/chat.mjs';
 
 const turn = () => ({ blocks: [], tokens: 0, finished: false });
 const a = turn(), b = turn();
@@ -35,7 +35,7 @@ assert.equal(safeUrl('https://example.com/page'), 'https://example.com/page');
 await assert.rejects(readEvents(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('event: delta\ndata: {'));c.close();}}),()=>{}), /before the response was complete/);
 console.log('Workstation checks passed: fragmented SSE, Unicode, tools, errors, session isolation, safe URLs.');
 
-const { createThread, threadShelf, organizeThread, wakeThreads } = await import('../web/threads.mjs');
+const { createThread, threadShelf, organizeThread, wakeThreads } = await import('../../web/js/threads.mjs');
 const thread = createThread('research-analyst', 'model-a', 1000);
 assert.equal(threadShelf(thread), 'active');
 assert.equal(organizeThread(thread, 'pin'), true);
@@ -44,7 +44,7 @@ assert.equal(organizeThread(thread, 'snooze', 2000, 1000), true);
 assert.equal(threadShelf(thread), 'snoozed', 'Snoozed pinned threads must not also appear in the active list');
 assert.equal(wakeThreads([thread], 1999), false);
 assert.equal(wakeThreads([thread], 2000), true);
-assert.equal(threadShelf(thread), 'pinned', 'Waking preserves the original pin');
+assert.equal(threadShelf(thread), 'active', 'Waking returns a snoozed thread to the main section');
 thread.busy = true;
 assert.equal(organizeThread(thread, 'settle'), false, 'Working threads cannot be settled');
 thread.busy = false;
@@ -66,7 +66,7 @@ assert.deepEqual(thread.turns, []);
 assert.equal(other.draft, 'Keep this draft');
 console.log('Thread checks passed: exclusive shelves, snooze expiry, busy guard, restore, independent drafts.');
 
-const { turnUsage, threadUsage, usagePanel } = await import('../web/usage.mjs');
+const { turnUsage, threadUsage, usagePanel } = await import('../../web/js/usage.mjs');
 const usageTurn = turn();
 applyEvent(usageTurn, 'usage', { input_tokens: 100, output_tokens: 30, reasoning_tokens: 20,
   cache_read_input_tokens: 60, cache_creation_input_tokens: 10 });
@@ -89,7 +89,7 @@ assert.ok(!panel.includes('<script>'));
 assert.match(panel, /&lt;script&gt;/);
 console.log('Usage checks passed: inclusive output, multi-hop totals, snapshot replacement, context, missing prices, escaping.');
 
-const { identityBadge } = await import('../web/identity.mjs');
+const { identityBadge } = await import('../../web/js/identity.mjs');
 const identities = Array.from({length: 30}, (_, i) => ({id: `item-${i}`, name: `Project ${i}`}));
 const badges = identities.map(item => identityBadge(item, identities, 'project'));
 assert.equal(new Set(badges.map(b => b.match(/--identity-hue:([^\"]+)/)[1])).size, identities.length);
@@ -103,3 +103,16 @@ const truncated = { blocks: [], tokens: 0 };
 applyEvent(truncated, 'done', { stop_reason: 'max_tokens' });
 assert.equal(truncated.finished, true);
 assert.match(truncated.error, /incomplete/);
+
+// Preferences must distinguish "all off" from defaults and show unavailable tools.
+{
+  const { toolSettingsPanel, disabledTools, setToolEnabled } = await import('../../web/js/tool-settings.mjs');
+  setToolEnabled('search_kb', false);
+  assert(disabledTools().includes('search_kb'));
+  const html = toolSettingsPanel(['search_kb'], [], [], false);
+  assert.match(html, /data-tool-setting="search_kb"\s*>/);
+  assert(!html.includes('data-tool-setting="web_search"'));
+  setToolEnabled('search_kb', true);
+  assert(!disabledTools().includes('search_kb'));
+  console.log('Tool preference controls passed.');
+}

@@ -31,7 +31,7 @@ def redact(text: str, types: frozenset[str] = DEFAULT_TYPES) -> tuple[str, dict[
 
 ## Tests to write
 
-See `tests/test_dlp_redact_contract.py` (skipped). Uses well-known test PANs (4111 1111 1111 1111) and a non-Luhn 16-digit number as the negative case.
+Proposed coverage (not implemented): `tests/test_dlp_redact_contract.py`. Uses well-known test PANs (4111 1111 1111 1111) and a non-Luhn 16-digit number as the negative case.
 
 ## Out of scope
 

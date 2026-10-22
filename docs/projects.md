@@ -6,7 +6,11 @@ lives at the bottom left. The two panel controls use distinct left/right icons.
 
 ## Local workspaces
 
-By default the picker shows only projects imported by this browser. It never
+The picker includes the bundled **Dark Souls knowledge** project and projects
+imported by this browser. Selecting Dark Souls chooses the Frampton assistant
+and its local retrieval tools; it does not copy the corpus into project storage.
+Build its semantic index using the [guide](guide.md#knowledge-and-evaluations)
+for hybrid search. Without an index, keyword search and file reading still work. It never
 lists the bundled personal-agent portfolio. Choose a folder of text files to
 save a snapshot on your local Runnrr runtime. The agent can search that snapshot
 and read individual files. It cannot edit the originals or watch later changes;
@@ -15,7 +19,8 @@ remove/reimport the project to update a folder snapshot.
 Projects live in SQLite (`data/projects.sqlite3`, configurable with
 `RUNNRR_PROJECT_DB`). A random browser workspace key scopes access. Clearing
 browser storage loses that key; this is not an account or recovery system.
-Transcripts, drafts, and pins still disappear on reload.
+Threads, transcripts, drafts, and sidebar state persist separately in
+`data/sessions.sqlite3` with the same workspace key.
 
 Imports accept up to 80 text files, 200 KB each, 1 MB total. Hidden files,
 dependencies, and binaries are skipped. Choose a smaller folder if necessary.
@@ -24,7 +29,7 @@ existing thread. Paths are document identifiers, never arbitrary server paths.
 
 ## Public portfolio demo
 
-`RUNNRR_PUBLIC_DEMO=1` exposes only shared portfolio projects and disables all
+`RUNNRR_PUBLIC_DEMO=1` exposes shared portfolio projects alongside the bundled knowledge project and disables all
 project mutations. The website uses `/runnrr-api/` on its separate runtime;
 legacy `/api/` clients remain unchanged. The browser sends requests to the
 prefix in `<html data-api-base>`.
@@ -46,7 +51,7 @@ index is separate and is not rebuilt by the public timer.
 
 ## Checks
 
-Run `pytest tests/test_projects.py -q`, `node tests/workstation.mjs`, and evaluate
-`tests/projects-browser.mjs` in the local collaborative browser. The latter
+Run `pytest tests/runtime/test_projects.py -q`, `node tests/unit/workstation.mjs`, and evaluate
+`tests/browser/projects-browser.mjs` in the local collaborative browser. The latter
 imports/deletes a disposable folder and mocks only the chat response. The
 workstation browser regression covers thread transitions and responsive layout.

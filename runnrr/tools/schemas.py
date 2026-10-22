@@ -18,7 +18,7 @@ def schemas_for_tools(
     description_overrides: Mapping[str, str] | None = None,
 ) -> list[dict]:
     """Return Anthropic-shaped schemas for a profile's allowed tool names."""
-    names = tuple(tool_names or DEFAULT_TOOL_NAMES)
+    names = DEFAULT_TOOL_NAMES if tool_names is None else tuple(tool_names)
     schemas: list[dict] = []
     for name in names:
         schema = SCHEMAS_BY_NAME.get(name)

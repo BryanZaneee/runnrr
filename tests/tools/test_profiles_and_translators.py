@@ -68,6 +68,9 @@ def test_frampton_profile_loads_ds1_persona_and_kb_tools():
         "read_file",
         "search_kb",
         "semantic_search_kb",
+        "web_search",
+        "fetch_url_text",
+        "calculator",
     )
     assert "Artorias" in profile.suggestions[1]
     assert profile.brand["accent"] == "#B3261E"

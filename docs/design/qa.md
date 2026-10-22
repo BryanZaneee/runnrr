@@ -76,11 +76,11 @@ is implemented as a native multiline textarea for Runnrr's text-only chat API.
 
 ## Verification
 
-- `node tests/workstation.mjs`: passed SSE fragmentation/Unicode, tool/error
+- `node tests/unit/workstation.mjs`: passed SSE fragmentation/Unicode, tool/error
   events, safe URLs, session isolation, and new thread lifecycle checks.
-- `.venv/bin/python -m pytest tests/test_workstation.py -q`: 2 passed. Existing
+- `.venv/bin/python -m pytest tests/api/test_workstation.py -q`: 2 passed. Existing
   Starlette/AnyIO deprecation warning only.
-- `tests/workstation-browser.mjs`, evaluated in the collaborative browser:
+- `tests/browser/workstation-browser.mjs`, evaluated in the collaborative browser:
   **36 checks passed**, four intercepted chat requests, no model-provider calls.
   Checks cover sanitization, sources, collapsed activity, model changes, original
   model/session binding, draft preservation, rename, pin, snooze, restore,
@@ -97,7 +97,7 @@ was made through the collaborative preview.
 ## 2026-10-16 — Usage analytics
 
 Verified the new Usage & costs panel and response disclosures through the
-collaborative preview at localhost:8001. `tests/usage-browser.mjs` uses an isolated
+collaborative preview at localhost:8001. `tests/browser/usage-browser.mjs` uses an isolated
 frame with synthetic chat/history responses; no paid provider call is needed.
 Checks cover inclusive reasoning, context size, partial and unpriced labels,
 estimated reasoning, model filters, HTML escaping, explicit read failures and
@@ -106,7 +106,7 @@ Inspected the populated panel visually at 390 pixels, including token details,
 missing prices, chart and daily table. Removed the synthetic frame afterward.
 
 Backend validation: 418 passed, 1 skipped in the full pytest suite; the focused
-metrics/accounting checks and `node tests/workstation.mjs` also pass. One environment-dependent
+metrics/accounting checks and `node tests/unit/workstation.mjs` also pass. One environment-dependent
 check was skipped. Live provider billing was not exercised.
 
 ## 2026-10-16 — Assistant/project picker and local/website separation
@@ -191,7 +191,7 @@ transcripts remain temporary. No additional polish loop needed.
 
 ## 2026-10-21 — Cleanup regression checks
 
-`tests/browser-runner.mjs` now executes the existing workstation, usage, and
+`tests/browser/browser-runner.mjs` now executes the existing workstation, usage, and
 project scenarios against a disposable local runtime. The 37 workstation,
 17 usage, and 11 project assertions passed in headless Chromium, including
 320–2048 px layouts, sanitization, stream isolation, project persistence, and

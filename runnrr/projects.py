@@ -113,7 +113,29 @@ def summary(row, owner: str) -> dict:
     }
 
 
+KNOWLEDGE_PROJECT_ID = "knowledge-frampton"
+
+
+def knowledge_project():
+    from runnrr.kb_loader import iter_markdown_files
+    from runnrr.profiles import load_profile
+
+    profile = load_profile("frampton")
+    return {
+        "id": KNOWLEDGE_PROJECT_ID,
+        "name": "Dark Souls knowledge",
+        "repository": None,
+        "updated": 0,
+        "file_count": sum(1 for _ in iter_markdown_files(root=profile.kb_root)),
+        "shared": True,
+        "editable": False,
+        "knowledge_profile": "frampton",
+    }
+
+
 def get_project(project_id: str, owner: str) -> dict:
+    if project_id == KNOWLEDGE_PROJECT_ID:
+        return knowledge_project() | {"owner": "public", "documents": {}}
     with database() as db:
         row = db.execute(
             "SELECT * FROM projects WHERE id=? AND owner IN (?, 'public')", (project_id, owner)
@@ -247,7 +269,7 @@ def list_projects(request: Request):
             ("public" if PUBLIC_DEMO else owner,),
         ).fetchall()
     return {
-        "projects": [summary(row, owner) for row in rows],
+        "projects": [knowledge_project(), *[summary(row, owner) for row in rows]],
         "mode": "portfolio" if PUBLIC_DEMO else "local",
     }
 

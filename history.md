@@ -723,3 +723,16 @@ raw repomix XMLs (tool result with line-slicing)     ← actual source for "show
 **Choice:** [`config.py`](backend/config.py) declares Anthropic + OpenAI + Moonshot model entries simultaneously. A `REGISTERED_PROVIDERS = {"anthropic"}` constant in `app.py` filters `/api/models` to only return models whose provider is implemented. Phase D adds `"openai_compat"` to the set.
 
 **Why:** keeps the registry stable across phases (no rework when adding providers). The frontend dropdown only ever sees what works. Footgun avoided: a Moonshot key set with no `OpenAICompatProvider` available wouldn't surface as a broken model in the dropdown.
+
+
+## 2026-10-21 — Portfolio demonstration scope
+
+The employer portfolio demo is the core product. Customer service uses simulated
+customers and real provider replies, with a small monitoring panel; live inbox
+integrations are outside this delivery. Workspace threads and provider context
+now use SQLite. Snooze only returns a thread to the main section after its
+chosen time; settle keeps it in the settled section until restored. Neither
+schedules agent execution. Dark Souls project knowledge reuses the existing local
+retrieval profile and optional web search. The semantic index still needs a real
+embedding build before a semantic-search rehearsal. Existing profiles, local
+knowledge, databases, and deployment units are preserved.

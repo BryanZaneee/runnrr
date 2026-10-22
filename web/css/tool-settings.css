@@ -1,0 +1,22 @@
+.tool-controls { display: grid; gap: 26px; padding: 2px 0 16px; }
+.tool-control-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tool-control-heading h3 { margin: 0; font-size: 11px; line-height: 1.5; font-weight: 600; color: var(--muted); letter-spacing: .025em; }
+.tool-control-heading > span { min-width: 18px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); font-size: 10px; text-align: center; }
+.tool-control-list { overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); }
+.tool-control-row { display: flex; align-items: center; gap: 10px; min-height: 66px; padding: 12px; margin: 0; cursor: pointer; }
+.tool-control-row + .tool-control-row { border-top: 1px solid var(--line); }
+.tool-control-row:hover { background: var(--sidebar); }
+.tool-control-icon { display: flex; align-items: center; justify-content: center; width: 30px; height: 32px; flex: none; border-radius: 8px; background: var(--soft); }
+.tool-control-icon img { width: 16px; height: 16px; opacity: .6; }
+.tool-control-copy { display: grid; gap: 3px; flex: 1; min-width: 0; }
+.tool-control-name { color: #343439; font-size: 12px; line-height: 1.4; font-weight: 500; overflow-wrap: anywhere; }
+.tool-control-hint { font-size: 10px; line-height: 1.4; color: var(--muted); }
+.tool-control-switch { appearance: none; -webkit-appearance: none; display: block; position: relative; flex: none; width: 30px; height: 18px; margin: 0; border: 1px solid #d9d9df; border-radius: 20px; background: #e5e5e9; cursor: pointer; transition: background .15s, border-color .15s; }
+.tool-control-switch::after { content: ''; position: absolute; width: 12px; height: 12px; top: 2px; left: 2px; border-radius: 50%; background: white; box-shadow: 0 1px 2px #0002; transition: transform .15s; }
+.tool-control-switch:checked { background: var(--accent); border-color: var(--accent); }
+.tool-control-switch:checked::after { transform: translateX(12px); }
+.tool-control-switch:focus-visible, .tool-setup-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.tool-control-switch:disabled { opacity: .45; cursor: wait; }
+.tool-setup-button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: none; min-height: 28px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.tool-setup-button span { font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .tool-control-switch, .tool-control-switch::after { transition: none; } }

@@ -1,4 +1,4 @@
-// Thread organization is page-local until durable backend sessions are available.
+// Shelf transitions are independent of agent execution.
 export function createThread(profileId, model, now = Date.now()) {
   return {
     id: crypto.randomUUID(),
@@ -42,6 +42,7 @@ export function organizeThread(
     thread.snoozedUntil = null;
   } else if (action === "snooze") {
     thread.settled = false;
+    thread.pinned = false;
     thread.snoozedUntil = wakeAt;
   } else return false;
   return true;

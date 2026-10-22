@@ -28,7 +28,7 @@ No new endpoints. `GET /api/profile` already surfaces `mcp_servers`; add `mcp_st
 
 ## Tests to write
 
-See `tests/test_mcp_runtime_contract.py` (skipped). Tests use a tiny in-repo fake MCP server script (`tests/fixtures/fake_mcp_server.py`) that speaks the minimal protocol.
+Proposed coverage (not implemented): `tests/test_mcp_runtime_contract.py`. Planned tests would use a tiny fake MCP server script (`tests/fixtures/fake_mcp_server.py`) that speaks the minimal protocol.
 
 ## Out of scope
 

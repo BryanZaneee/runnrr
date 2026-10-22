@@ -53,3 +53,12 @@ Rollback: restore the prior static site revision (3b7e38e) to use the legacy
 `/api` backend, then disable the new service/timer. Project SQLite data and the
 legacy runtime can remain intact. Caddy's pre-change backup is
 `/etc/caddy/Caddyfile.before-runnrr-projects-20261016`.
+
+## Tool controls (2026-10-22)
+
+The live panel lists only tools configured for the selected assistant, with
+labels and switches only. All four active profiles include `fetch_url_text`
+and `calculator`. The live profiles omit `web_search` because Tavily has no
+configured key; this is service readiness, not a DeepSeek limitation. Preserve
+this override until both its key and reviewed request-cost bounds are set.
+Customer-service and Frampton retain their current semantic indexes.

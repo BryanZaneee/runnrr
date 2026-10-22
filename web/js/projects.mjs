@@ -1,6 +1,6 @@
 import { identityBadge } from "./identity.mjs";
 
-// Only the workspace key persists in the browser; transcripts remain temporary.
+// The browser keeps only an access key; projects and threads live in SQLite.
 let owner;
 try {
   owner = localStorage.getItem("runnrr-workspace-key");
@@ -76,7 +76,9 @@ export function initProjects({
         : projectState.items.map((p) => ({
             id: p.id,
             name: p.name,
-            detail: `${p.repository ? "GitHub · " + p.repository : (p.shared ? "Website · " : "Folder · ") + p.file_count + " files"} · ${p.shared ? "Shared" : "Your workspace"}`,
+            detail: p.knowledge_profile
+              ? "Local knowledge · retrieval and cited sources"
+              : `${p.repository ? "GitHub · " + p.repository : (p.shared ? "Website · " : "Folder · ") + p.file_count + " files"} · ${p.shared ? "Shared" : "Your workspace"}`,
           }));
     const matches = rows.filter((p) =>
       `${p.name} ${p.detail}`.toLowerCase().includes(q),
@@ -140,7 +142,11 @@ export function initProjects({
         $("picker-query").focus();
       } else if (step === "projects") {
         dialog.close();
-        startThread(agent, b.dataset.choice || null);
+        startThread(
+          projectState.items.find((p) => p.id === b.dataset.choice)
+            ?.knowledge_profile || agent,
+          b.dataset.choice || null,
+        );
       } else details(b.dataset.choice);
     }
     if (b.dataset.projectStart) {

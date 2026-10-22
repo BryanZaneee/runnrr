@@ -37,7 +37,7 @@ Env: reuses `TWILIO_AUTH_TOKEN`, `TWILIO_NUMBER_MAP`; adds `RUNNRR_STT`, `RUNNRR
 
 ## Tests to write
 
-See `tests/test_channel_voice_contract.py` (skipped). Audio path tested with a fake STT that yields scripted transcripts and a fake TTS that records what it was asked to say — no vendor calls.
+Proposed coverage (not implemented): `tests/test_channel_voice_contract.py`. Audio path tested with a fake STT that yields scripted transcripts and a fake TTS that records what it was asked to say — no vendor calls.
 
 ## Out of scope
 

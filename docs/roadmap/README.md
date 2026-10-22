@@ -1,35 +1,38 @@
 # Roadmap
 
-This is the current implementation sequence. Plans in `../plans/archive/` are
-historical and do not authorize deleting active profiles or APIs.
+Runnrr's core product is a polished portfolio demo for employers. The aim is a
+convincing agent workstation with real responses, visible tool activity, and
+clear boundaries around simulated work. Archived plans are historical, not
+instructions to expand scope or delete active profiles.
 
-## Finishing the current workstation
+## Implemented locally
 
-The local workstation, inclusive usage accounting, persistent usage dashboard,
-owner-scoped project imports, and public portfolio refresh are implemented.
-Their local integration checks cover concurrency, failure, and browser behavior.
-Deployment and live-service verification remain separate. See
-[maintenance results](../maintenance.md).
+- Workstation threads, project imports, streaming, and usage analytics.
+- SQLite persistence for workspace threads, drafts, organization, and completed
+  provider context. Interrupted responses remain visible as incomplete.
+- Snoozed and settled sections: snooze returns a thread after its deadline;
+  settle waits for manual restore. Neither launches agent work.
+- Dark Souls knowledge selection using the local corpus and existing retrieval
+  tools, with optional web search. Hybrid search requires an index build.
+- Customer-service proof of concept: simulated customers, real model replies,
+  a small live monitoring panel, tool activity, and saved conversation threads.
+- Public portfolio project snapshots and refresh tooling.
 
-## Proposed next delivery sequence
+## Remaining demonstration preparation
 
-These are candidates for the owner to prioritize, defer, or abandon; none is
-automatically authorized by committing the current work.
+1. Build the Dark Souls semantic index with the chosen embedding backend and
+   verify retrieval quality against representative questions. Keyword search
+   and file reading are available before that build.
+2. Configure provider keys and reviewed cost bounds, then rehearse a real model
+   demo. Automated checks use injected responses and do not spend provider budget.
+3. Review screenshots and the employer presentation with the final content.
+4. Decide whether to publish this version. Deployment and live-service checks
+   remain a separate, manual release task.
 
-1. Durable sessions: persist messages and recover interrupted turns; preserve
-   exact profile/model/project binding and test restart recovery.
-2. Authentication and ownership: protect sessions, projects, and usage per user;
-   migrate browser workspace keys without losing existing projects.
-3. Approvals and audit: persist pending actions, enforce decisions server-side,
-   add cancellation and an operator kill switch before external write tools.
-4. Writable workspaces and artifacts: path containment, quotas, previews, and
-   downloads; establish isolation before executing arbitrary tools.
-5. Support integrations: verified inbound events, idempotent thread routing,
-   draft replies, and human approval before sending customer messages.
-6. MCP and installed-agent adapters: explicit capability contracts, lifecycle
-   handling, and permission propagation.
-7. Scheduling, memory, delegation, and voice follow those foundations.
+## Outside this delivery scope
 
-The individual documents here retain design notes and acceptance ideas. Serving
-UI from the runtime is already complete. These future items are not claims of
-current functionality. Deployment remains a separate manual operation.
+Real customer inboxes, enterprise authentication, autonomous scheduling,
+external write approvals, writable agent workspaces, installed-agent adapters,
+MCP connections, voice, and delegation are possible extensions, not prerequisites
+for the portfolio demo. Existing design notes retain context without making
+these promised features. Preserve the existing profiles and local user data.

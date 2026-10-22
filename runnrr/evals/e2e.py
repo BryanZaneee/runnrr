@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -191,8 +190,3 @@ async def async_end_to_end_record(
         k=5,
         skip_reason=None,
     )
-
-
-def end_to_end_record(*args, **kwargs) -> dict:
-    """Synchronous single-case entry point with an isolated provider client."""
-    return asyncio.run(async_end_to_end_record(*args, **kwargs))

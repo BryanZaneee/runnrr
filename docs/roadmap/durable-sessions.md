@@ -43,7 +43,7 @@ Schema: `sessions(id TEXT PK, profile_id, tenant_id NULL, provider, last_seen RE
 
 ## Tests to write
 
-See `tests/test_durable_sessions_contract.py` (skipped). Key one: build the app with a file-backed store, POST a turn, **construct a fresh app/store against the same file** (simulates uvicorn restart), POST the same `session_id`, assert the first turn is in `messages` sent to the provider.
+Proposed coverage (not implemented): `tests/test_durable_sessions_contract.py`. Key one: build the app with a file-backed store, POST a turn, **construct a fresh app/store against the same file** (simulates uvicorn restart), POST the same `session_id`, assert the first turn is in `messages` sent to the provider.
 
 ## Out of scope
 

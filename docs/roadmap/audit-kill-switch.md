@@ -38,7 +38,7 @@ Audit record: `{"ts","kind","session_id","profile_id","tenant_id","turn_id","mod
 
 ## Tests to write
 
-See `tests/test_audit_log_kill_switch_contract.py` (skipped).
+Proposed coverage (not implemented): `tests/test_audit_log_kill_switch_contract.py`.
 
 ## Out of scope
 

@@ -32,14 +32,18 @@ def test_owner_isolation_and_persistence(client):
     made = create(c)
     assert made.status_code == 200, made.text
     pid = made.json()["id"]
-    assert c.get("/api/projects", headers=OWNER).json()["projects"][0]["name"] == "Desk"
-    assert c.get("/api/projects", headers=OTHER).json()["projects"] == []
+    assert any(p["id"] == pid for p in c.get("/api/projects", headers=OWNER).json()["projects"])
+    assert [p["id"] for p in c.get("/api/projects", headers=OTHER).json()["projects"]] == [
+        projects.KNOWLEDGE_PROJECT_ID
+    ]
     assert c.post(f"/api/projects/{pid}/delete", headers=OTHER).status_code == 404
     # A new connection sees the saved project; removing it does not affect others.
     with projects.database() as db:
         assert db.execute("SELECT count(*) FROM projects").fetchone()[0] == 1
     assert c.post(f"/api/projects/{pid}/delete", headers=OWNER).status_code == 200
-    assert c.get("/api/projects", headers=OWNER).json()["projects"] == []
+    assert [p["id"] for p in c.get("/api/projects", headers=OWNER).json()["projects"]] == [
+        projects.KNOWLEDGE_PROJECT_ID
+    ]
 
 
 @pytest.mark.parametrize(
@@ -146,12 +150,16 @@ def test_chat_project_binding(client, monkeypatch, fake_provider_cls):
 def test_local_picker_never_exposes_portfolio(client, monkeypatch):
     c, _ = client
     shared = projects.save_project("public", "Portfolio", {"website.md": "Public"})
-    assert c.get("/api/projects", headers=OWNER).json()["projects"] == []
+    assert [p["id"] for p in c.get("/api/projects", headers=OWNER).json()["projects"]] == [
+        projects.KNOWLEDGE_PROJECT_ID
+    ]
     with pytest.raises(HTTPException) as exc:
         projects.get_project(shared["id"], projects.owner_key(type("R", (), {"headers": OWNER})()))
     assert exc.value.status_code == 404
     monkeypatch.setattr(projects, "PUBLIC_DEMO", True)
-    assert c.get("/api/projects", headers=OWNER).json()["projects"][0]["name"] == "Portfolio"
+    assert any(
+        p["id"] == shared["id"] for p in c.get("/api/projects", headers=OWNER).json()["projects"]
+    )
     assert create(c).status_code == 403
 
 
@@ -216,3 +224,31 @@ def test_portfolio_refresh_keeps_last_snapshot_when_github_fails(monkeypatch, tm
     assert saved.read_text() == "Previously verified knowledge"
     with projects.database() as db:
         assert db.execute("SELECT count(*) FROM projects").fetchone()[0] == 0
+
+
+def test_builtin_knowledge_uses_local_retrieval_profile(client, monkeypatch, fake_provider_cls):
+    c, app = client
+    captured = []
+
+    async def stream(message, session, provider, model, profile, **kwargs):
+        captured.append(profile)
+        yield {"event": "done", "stop_reason": "end_turn"}
+
+    monkeypatch.setattr(app, "run_conversation_stream", stream)
+    monkeypatch.setattr(app, "get_provider", lambda _: fake_provider_cls([]))
+    response = c.post(
+        "/api/chat",
+        headers=OWNER,
+        json={
+            "session_id": "knowledge-test",
+            "profile": "frampton",
+            "project_id": projects.KNOWLEDGE_PROJECT_ID,
+            "model": "claude-sonnet-4-5",
+            "message": "How do I reach Anor Londo?",
+        },
+    )
+    assert "event: done" in response.text
+    assert captured[0].id == "frampton"
+    assert captured[0].kb_root.is_dir()
+    assert {"semantic_search_kb", "search_kb", "read_file", "web_search"} <= set(captured[0].tools)
+    assert "search_project" not in captured[0].tools

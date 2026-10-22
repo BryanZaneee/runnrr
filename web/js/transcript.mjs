@@ -1,5 +1,5 @@
-import { marked } from "./vendor/marked.mjs";
-import DOMPurify from "./vendor/purify.mjs";
+import { marked } from "../vendor/marked.mjs";
+import DOMPurify from "../vendor/purify.mjs";
 import { safeUrl } from "./chat.mjs";
 
 const blocks = new WeakMap();

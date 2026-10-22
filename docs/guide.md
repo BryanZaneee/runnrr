@@ -17,6 +17,13 @@ Profiles gate which tools an agent can use. Sales tools are previews: they do
 not persist leads to a CRM or charge customers. New business profiles can be
 added without changing the engine.
 
+The workstation picker intentionally omits `sales-concierge` and
+`bzs-concierge`; both remain loadable by ID for their APIs and evaluations.
+Their catalog and preview tools are active code, not abandoned integrations.
+`research-analyst` uses web tools and does not require a bundled `kb/` folder;
+`sales-concierge` reads its `data/catalog.json` instead. Missing local knowledge
+for `personal-agent` is a setup concern, not a missing profile.
+
 ## Add an agent
 
 Create `profiles/<id>/profile.json` and a `system.md` prompt. For example:
@@ -48,7 +55,19 @@ profile index explicitly after changing its knowledge base:
 .venv/bin/python -m runnrr.rag.cli query customer-service "opening hours" --k 3
 ```
 
-Voyage embeddings require `VOYAGE_API_KEY`. Tests use deterministic fixtures.
+For the bundled Dark Souls project, build its own index:
+
+```bash
+.venv/bin/python -m runnrr.rag.cli build frampton
+```
+
+Voyage embeddings require `VOYAGE_API_KEY` and a reviewed embedding cost bound.
+The local backend is also supported with the optional `rag-local` dependencies;
+configure the same backend and model when building and serving. Do not use the
+fake test backend for a semantic-search demonstration. Until an index is built,
+Frampton can search local text and read source pages, but semantic search reports
+that the index is missing. `TAVILY_API_KEY` and a search cost bound enable the
+optional web fallback. Tests use deterministic fixtures.
 Indexes live under `profiles/<id>/.index/` and are ignored by Git. Chat never
 rebuilds an index automatically; restart the runtime after rebuilding.
 

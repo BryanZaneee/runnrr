@@ -40,7 +40,7 @@ class ToolDef:
 
 ## Tests to write
 
-See `tests/test_hitl_actions_contract.py` (skipped).
+Proposed coverage (not implemented): `tests/test_hitl_actions_contract.py`.
 
 ## Out of scope
 

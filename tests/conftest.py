@@ -16,6 +16,13 @@ FIXTURE_KB = (Path(__file__).parent / "fixtures" / "mini_kb").resolve()
 
 
 @pytest.fixture(autouse=True)
+def isolated_threads(monkeypatch, tmp_path):
+    from runnrr import sessions
+
+    monkeypatch.setattr(sessions, "DB_PATH", tmp_path / "sessions.sqlite3")
+
+
+@pytest.fixture(autouse=True)
 def use_mini_kb(monkeypatch):
     """Override KB_ROOT in both modules that import it. Autouse so every test is isolated."""
     from runnrr import config, kb_loader

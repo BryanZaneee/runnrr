@@ -27,7 +27,7 @@ Tools only; no new HTTP endpoints. Profile opts in by listing `book_appointment`
 
 ## Tests to write
 
-See `tests/test_calendar_crm_adapters_contract.py` (skipped). Network is faked at the `urllib` boundary; the OAuth refresh test uses a canned expired-token response.
+Proposed coverage (not implemented): `tests/test_calendar_crm_adapters_contract.py`. Network is faked at the `urllib` boundary; the OAuth refresh test uses a canned expired-token response.
 
 ## Out of scope
 

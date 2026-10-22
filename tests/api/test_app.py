@@ -14,7 +14,7 @@ import pytest
 
 from runnrr.profiles import AgentProfile
 
-MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
+MINI_RAG_FIXTURE = (Path(__file__).parents[1] / "fixtures" / "mini_rag_kb").resolve()
 
 
 @pytest.mark.asyncio
@@ -111,7 +111,15 @@ class TestProfiles:
 
         assert body["id"] == "frampton"
         assert body["label"] == "Frampton"
-        assert body["tools"] == ["list_kb", "read_file", "search_kb", "semantic_search_kb"]
+        assert body["tools"] == [
+            "list_kb",
+            "read_file",
+            "search_kb",
+            "semantic_search_kb",
+            "web_search",
+            "fetch_url_text",
+            "calculator",
+        ]
         assert [schema["name"] for schema in body["tool_schemas"]] == body["tools"]
         assert body["mcp_servers"] == []
         assert body["brand"]["accent"] == "#B3261E"

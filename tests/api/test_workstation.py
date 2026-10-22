@@ -8,8 +8,10 @@ def test_workstation_assets_and_private_paths(client):
     response = c.get("/")
     assert response.status_code == 200
     assert "Runnrr — Workstation" in response.text
-    assert c.get("/app.mjs").status_code == 200
-    assert c.get("/threads.mjs").status_code == 200
+    assert c.get("/js/app.mjs").status_code == 200
+    assert c.get("/js/threads.mjs").status_code == 200
+    assert c.get("/css/styles.css").status_code == 200
+    assert c.get("/css/tool-settings.css").status_code == 200
     assert c.get("/api/health").json()["status"] == "ok"
     for path in [
         "/.env",

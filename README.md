@@ -2,7 +2,9 @@
 
 A self-hosted control surface for agents doing work beyond coding: customer
 support, research, and other business workflows.
-Runnrr brings threads, project context, tool activity, and usage into one workstation.
+Runnrr is a portfolio demo built to show employers how agent workflows can feel
+like a complete product. It brings threads, project context, tool activity, and
+usage into one workstation.
 The current runtime calls provider APIs; installed CLI agents and subscription
 harnesses are a future integration.
 Choose an agent, give it a task, and follow its response and tool activity in one place.
@@ -16,13 +18,12 @@ Regenerate: `npm ci && npx playwright install chromium && npm run capture`
 
 Runnrr currently supports live streaming chat, configured agent profiles,
 read-only knowledge tools, skills, web research, and usage accounting. The web
-workstation is served by the runtime itself. Conversations, pins, and drafts
-are temporary and clear when the page reloads; server restarts or inactivity
-can reset conversation context too.
+workstation is served by the runtime itself. Threads, drafts, organization, and
+completed conversation context are saved in a small SQLite database.
 
 ## Quick start
 
-Run from a source checkout: the Python wheel alone does not include the web
+Run from the downloaded or cloned repository folder: the Python wheel alone does not include the web
 workstation or bundled profiles.
 
 Python 3.13 is pinned in
@@ -53,8 +54,10 @@ After frontend edits, reload the page. Add `--reload` for backend development.
 ## Workstation
 
 - **Threads:** compact sidebar with search, rename, pins, snooze, settle,
-  restore, and deletion with immediate undo. Thread organization is temporary.
-  Snooze wakes a thread while this page is open; it does not schedule agent work.
+  restore, and deletion with immediate undo. Snooze moves a thread into its own
+  section until the chosen time, then returns it to the main list—even after
+  reopening the app. It never schedules agent work. Settled threads stay settled
+  until restored.
 - **Conversation:** streaming Markdown, expandable tool activity, source labels,
   copy response, and token usage, with a floating multiline composer.
 - **Assistant and model selectors:** use the real profiles and available models.
@@ -64,12 +67,27 @@ After frontend edits, reload the page. Add `--reload` for backend development.
   sources, activity, and thread details. Resize it by dragging its divider or
   using the arrow keys on the focused divider. Side panels become drawers on mobile.
 
-The workspace brings Runnrr's supported assistant capabilities together in one
-place, with threads, tool activity, and project context.
+**Customer service demo:** open Workspace → Customer service demo to send the
+agent through three simulated customer conversations. The small monitoring panel
+shows real model replies and tool activity, with links to the saved threads.
+Keep the page open during a run; Stop run cancels the current request. No reply
+is sent to a real inbox. Runs use your configured provider and budget.
 
-Agent creation, editing capabilities, attachments, file generation/previews,
-voice, approvals, messaging, scheduled work, authentication, and durable
-history are not implemented in the workstation yet. No actions are simulated
+**Project knowledge:** choose Dark Souls knowledge for the bundled local wiki
+collection. The assistant uses existing retrieval tools and cites its sources.
+Hybrid semantic retrieval needs an index built first; keyword search and file
+reading work without it. Optional web search supplements missing local evidence.
+See [knowledge setup](docs/guide.md#knowledge-and-evaluations).
+
+The Tools panel lets users turn configured abilities on or off for the next message.
+Preferences stay in this browser and apply across assistants. Built-in and custom
+tools are separated, with explanations of search quality, time, and cost tradeoffs.
+Unavailable tools cannot be enabled; past tool results remain in conversation history.
+Custom integrations still require developer setup.
+
+Agent creation, attachments, file generation/previews,
+voice, approvals, messaging, scheduled work, and account authentication
+are not implemented in the workstation yet. No actions are simulated
 as successful. The original supplied design is preserved in [docs/design/](docs/design/).
 
 The former dashboard, builder, and eval pages have been removed. Their backend
@@ -82,7 +100,7 @@ Open **Workspace → Usage & costs** for persistent chat metrics by day, model,
 provider and assistant. Expand a response’s usage line for token/cache/reasoning
 breakdowns, estimated cost, timing and context usage. Reasoning is included in
 output and counted once. Unknown pricing and partial reports are labeled.
-Only accounting metadata persists; transcripts stay temporary. See
+Usage stores accounting metadata separately from saved conversations. See
 [usage accounting and API details](docs/usage.md).
 
 ## Validation
@@ -105,21 +123,30 @@ recorded in [design QA](docs/design/qa.md).
 
 FastAPI exposes `/api/chat` as SSE and read-only profile, model, health,
 budget, tool, retrieval, and evaluation endpoints. Anthropic, OpenAI-compatible,
-and Gemini adapters share one agent loop. Sessions live in process memory, so run a single worker. Budgets, usage metadata,
-and imported projects persist in SQLite under `data/`.
+and Gemini adapters share one agent loop. An in-memory session cache coordinates active requests, so run a single worker.
+Workspace threads and provider context persist in `data/sessions.sqlite3`
+(`RUNNRR_SESSION_DB`); budgets, usage, and projects use separate SQLite files.
+Interrupted responses are marked incomplete and never resumed automatically.
+Legacy chat clients without a workspace header remain temporary.
+
+A random browser workspace key controls access to saved threads and projects.
+Clearing that key loses access; this is not account authentication or recovery.
+Back up the runtime data and protect it as conversation content.
 
 Only `web/` is served as public static content. `.env`, profiles, local KBs,
 and Git metadata are not web assets. Private knowledge, resumes, codebase
 dumps, and credentials stay ignored. `kb/frampton/` is the exception: it
 contains public third-party wiki material.
 
-The product direction is one runtime per business with authenticated access,
-durable sessions, a writable workspace, and business integrations. Those are
-future backend work, tracked in [the implementation sequence](docs/roadmap/README.md).
+The scope is a polished employer showcase, with simulated support work and
+real agent responses. Production inbox integrations, account systems, and
+autonomous scheduling are outside the current delivery scope. See
+[the roadmap](docs/roadmap/README.md).
 
 ## Documentation
 
 - [Maintenance results and remaining work](docs/maintenance.md)
+- [Saved threads and support demonstration](docs/sessions.md)
 - [Project storage and refresh](docs/projects.md)
 - [Usage accounting](docs/usage.md)
 - [Bundled agents](docs/guide.md#bundled-agents)
@@ -144,9 +171,33 @@ Bryan’s public portfolio. See [project storage and refresh](docs/projects.md).
 
 ## Repository layout
 
-- `runnrr/`: API, agent loop, providers, tools, retrieval, and evaluations.
-- `web/`: browser workstation and licensed vendor assets; no build step.
-- `profiles/`: agent configuration, prompts, and bundled example knowledge.
-- `tests/`: Python, frontend, and browser checks.
-- `docs/`: guides, design evidence, examples, and the current roadmap.
-- `deploy/`: manual deployment and refresh service definitions.
+| Work on | Start here |
+| --- | --- |
+| HTTP endpoints and streaming lifecycle | [runnrr/app.py](runnrr/app.py) |
+| Agent loop and tool-call ordering | [runnrr/agent.py](runnrr/agent.py) |
+| Models and provider adapters | [runnrr/config.py](runnrr/config.py), [runnrr/providers/](runnrr/providers/) |
+| Saved threads and conversation context | [runnrr/sessions.py](runnrr/sessions.py), [web/js/thread-store.mjs](web/js/thread-store.mjs) |
+| Projects and workspace ownership | [runnrr/projects.py](runnrr/projects.py), [web/js/projects.mjs](web/js/projects.mjs) |
+| Tool registration and permission checks | [runnrr/tools/registry.py](runnrr/tools/registry.py), [runnrr/tools/dispatch.py](runnrr/tools/dispatch.py) |
+| Knowledge retrieval and indexing | [runnrr/rag/](runnrr/rag/), [runnrr/kb_loader.py](runnrr/kb_loader.py) |
+| Tokens, costs, and spending limits | [runnrr/usage.py](runnrr/usage.py), [runnrr/metrics.py](runnrr/metrics.py), [runnrr/budget.py](runnrr/budget.py), [runnrr/pricing.py](runnrr/pricing.py) |
+| Workstation layout and styling | [web/index.html](web/index.html), [web/css/](web/css/) |
+| UI wiring and chat rendering | [web/js/app.mjs](web/js/app.mjs), [web/js/chat.mjs](web/js/chat.mjs), [web/js/transcript.mjs](web/js/transcript.mjs) |
+| Thread organization and support demo | [web/js/threads.mjs](web/js/threads.mjs), [web/js/support-demo.mjs](web/js/support-demo.mjs) |
+| Tool preferences | [web/js/tool-settings.mjs](web/js/tool-settings.mjs) |
+| Agent personas and allowed tools | [profiles/](profiles/), [runnrr/profiles.py](runnrr/profiles.py) |
+| Evaluation CLI and grading | [runnrr/evals/](runnrr/evals/) |
+| Setup, current scope, and release steps | [docs/guide.md](docs/guide.md), [docs/roadmap/](docs/roadmap/README.md), [deploy/](deploy/README.md) |
+
+Tests are grouped into `tests/api/`, `tests/runtime/`, `tests/providers/`,
+`tests/tools/`, `tests/rag/`, and `tests/evals/`. Shared fixtures stay in
+`tests/conftest.py` and `tests/fixtures/`. Run a subsystem with, for example,
+`.venv/bin/python -m pytest tests/rag/ -q`.
+`tests/unit/` contains browser-independent Node assertions;
+`tests/browser/` contains the browser runner and interaction checks.
+The full checks remain `scripts/check.sh` and `scripts/check-browser.sh`.
+
+Only `web/` is public: scripts live in `web/js/`, styles in `web/css/`, and
+third-party assets and licenses in `web/vendor/`. There is no frontend build.
+Design exports in `docs/design/source/` and plans in `docs/plans/archive/`
+are historical reference material, not shipped application code.

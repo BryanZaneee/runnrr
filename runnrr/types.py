@@ -40,6 +40,7 @@ class SessionDict(TypedDict):
     profile: str
     model: NotRequired[str]
     turns: NotRequired[int]
+    workspace_owner: NotRequired[str | None]
     busy: NotRequired[bool]
     project_id: NotRequired[str | None]
     project_owner: NotRequired[str | None]

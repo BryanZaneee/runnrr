@@ -81,6 +81,7 @@
     $('undo-action').click();
     assert($('sidebar-list').querySelector(`[data-session="${firstId}"]`),'Undo restores settled thread');
     click(`[data-session="${firstId}"]`); $('thread-actions').click(); click('[data-delete]'); $('delete-form').requestSubmit();
+    await wait(()=>!d.querySelector(`[data-session="${firstId}"]`),'Delete did not finish');
     assert(!d.querySelector(`[data-session="${firstId}"]`),'Delete removes the thread');
     $('undo-action').click();
     assert($('header-identity').textContent.includes('Weekly summary'),'Undo deletion restores conversation');

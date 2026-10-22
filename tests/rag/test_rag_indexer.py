@@ -12,7 +12,7 @@ from runnrr.rag.indexer import Indexer
 from runnrr.rag.pca import PCA_FILENAME, load_pca_sidecar, project_query
 from runnrr.rag.retriever import get_retriever_for_profile
 
-MINI_RAG_FIXTURE = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
+MINI_RAG_FIXTURE = (Path(__file__).parents[1] / "fixtures" / "mini_rag_kb").resolve()
 
 
 @pytest.fixture

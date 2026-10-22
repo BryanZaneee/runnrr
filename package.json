@@ -5,10 +5,10 @@
   "description": "Frontend checks and local workstation screenshots",
   "type": "module",
   "scripts": {
-    "test": "node tests/workstation.mjs",
-    "test:browser": "node tests/browser-runner.mjs",
+    "test": "node tests/unit/workstation.mjs",
+    "test:browser": "node tests/browser/browser-runner.mjs",
     "capture": "node docs/screenshots/capture.mjs",
-    "format:check": "prettier --check web/*.mjs"
+    "format:check": "prettier --check web/js/*.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

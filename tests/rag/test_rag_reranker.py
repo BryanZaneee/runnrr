@@ -78,7 +78,7 @@ def test_semantic_search_honors_rerank_enabled(tmp_path, monkeypatch) -> None:
     import shutil
     from pathlib import Path
 
-    mini = (Path(__file__).parent / "fixtures" / "mini_rag_kb").resolve()
+    mini = (Path(__file__).parents[1] / "fixtures" / "mini_rag_kb").resolve()
     kb = tmp_path / "mini_rag_kb"
     shutil.copytree(mini, kb)
     index_root = tmp_path / "indexes"

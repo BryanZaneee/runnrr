@@ -3,6 +3,7 @@
   color: #343439; background: #fdfdfd; font-size: 14px;
   --canvas: #fdfdfd; --sidebar: #f8f8f8; --line: #ededee; --muted: #82828c;
   --accent: #2453e6; --soft: #f2f2f4; --sidebar-width: 232px;
+  --sidebar-motion: 180ms cubic-bezier(.2,.8,.2,1);
 }
 * { box-sizing: border-box; }
 body { margin: 0; -webkit-font-smoothing: antialiased; }
@@ -19,7 +20,7 @@ img { width: 17px; height: 17px; flex: none; }
 .skip-link { position: fixed; left: 12px; top: -60px; background: white; padding: 12px; z-index: 100; }
 .skip-link:focus { top: 12px; }
 .workstation { height: 100dvh; display: flex; overflow: hidden; }
-.sidebar { width: var(--sidebar-width); flex: none; display: flex; flex-direction: column; background: var(--sidebar); border-right: 1px solid var(--line); padding: 0 8px; z-index: 30; }
+.sidebar { width: var(--sidebar-width); flex: none; display: flex; flex-direction: column; background: var(--sidebar); border-right: 1px solid var(--line); padding: 0 8px; z-index: 30; margin-left: 0; transition: margin-left var(--sidebar-motion), transform var(--sidebar-motion), display var(--sidebar-motion) allow-discrete; }
 .brand-row { height: 54px; padding: 0 8px; display: flex; align-items: center; gap: 8px; }
 .wordmark { text-decoration: none; color: #303036; font-size: 15px; font-weight: 650; letter-spacing: -.4px; display: flex; gap: 5px; align-items: baseline; margin-right: auto; }
 .wordmark span { font-size: 12px; letter-spacing: 0; font-weight: 400; color: var(--muted); }
@@ -80,7 +81,7 @@ kbd { font-family: inherit; font-size: 10px; color: #a0a0a9; white-space: nowrap
 .header-actions { display: flex; align-items: center; gap: 5px; }
 .header-actions .selected { background: var(--soft); }
 #open-nav { display: none; }
-.sidebar-collapsed .sidebar { display: none; }
+.sidebar-collapsed .sidebar { display: none; margin-left: calc(-1 * var(--sidebar-width)); }
 .sidebar-collapsed #open-nav { display: inline-flex; }
 .workspace-body { display: flex; min-height: 0; flex: 1; position: relative; }
 .chat-column { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
@@ -156,7 +157,12 @@ summary::-webkit-details-marker { display: none; }
 .composer-context button { color: var(--accent); text-decoration: underline; }
 .scroll-bottom { position: absolute; bottom: 180px; left: calc(50% - 16px); background: white; border: 1px solid var(--line); border-radius: 50%; box-shadow: 0 3px 10px #0001; }
 .scroll-bottom img { transform: rotate(180deg); }
-.workspace-panel { position: relative; width: var(--panel-width,clamp(290px,28vw,570px)); flex: none; border-left: 1px solid var(--line); display: flex; flex-direction: column; background: var(--canvas); min-width: 0; }
+.workspace-panel { --drawer-width: var(--panel-width,clamp(290px,28vw,570px)); position: relative; width: var(--drawer-width); flex: none; border-left: 1px solid var(--line); display: flex; flex-direction: column; background: var(--canvas); min-width: 0; margin-right: 0; transition: margin-right var(--sidebar-motion), transform var(--sidebar-motion), display var(--sidebar-motion) allow-discrete; }
+.workspace-panel[hidden] { margin-right: calc(-1 * var(--drawer-width)); }
+@starting-style {
+  .sidebar { margin-left: calc(-1 * var(--sidebar-width)); }
+  .workspace-panel { margin-right: calc(-1 * var(--drawer-width)); }
+}
 .panel-resizer { position: absolute; left: -4px; top: 0; bottom: 0; width: 7px; cursor: col-resize; touch-action: none; z-index: 1; }
 .panel-resizer:hover, .panel-resizer:focus-visible { background: #2453e61a; }
 body.resizing { user-select: none; cursor: col-resize; }
@@ -236,13 +242,17 @@ dialog input { width: 100%; border: 1px solid #dcdce2; border-radius: 6px; paddi
 }
 @media (max-width: 1100px) {
   .panel-resizer { display: none; }
-  .workspace-panel { position: absolute; right: 0; top: 0; bottom: 0; z-index: 20; width: min(370px,100%); box-shadow: -20px 0 60px #0000000a; }
+  .workspace-panel { position: absolute; right: 0; top: 0; bottom: 0; z-index: 20; width: min(370px,100%); box-shadow: -20px 0 60px #0000000a; transform: translateX(0); }
+  .workspace-panel, .workspace-panel[hidden] { margin-right: 0; }
+  .workspace-panel[hidden] { transform: translateX(100%); }
+  @starting-style { .workspace-panel { margin-right: 0; transform: translateX(100%); } }
   .composer-control select { max-width: 170px; }
   .composer-control img { display: block; }
 }
 @media (max-width: 760px) {
-  .sidebar, .sidebar-collapsed .sidebar { display: none; position: fixed; inset: 0 auto 0 0; width: min(280px,87vw); box-shadow: 15px 0 50px #0001; }
-  .sidebar.is-open { display: flex; }
+  .sidebar, .sidebar-collapsed .sidebar { display: none; position: fixed; inset: 0 auto 0 0; width: min(280px,87vw); box-shadow: 15px 0 50px #0001; margin-left: 0; transform: translateX(-100%); }
+  .sidebar.is-open { display: flex; transform: translateX(0); }
+  @starting-style { .sidebar.is-open { transform: translateX(-100%); } }
   #open-nav { display: inline-flex; }
   .workspace-header { height: 49px; padding: 0 9px; gap: 6px; }
   .breadcrumb-agent, .breadcrumb-divider { display: none; }
@@ -346,3 +356,12 @@ dialog.project-picker { width: min(680px,calc(100% - 32px)); padding: 0; border-
 .usage-table thead { color: var(--muted); }
 .usage-chart { display: flex; align-items: end; height: 65px; gap: 3px; border-bottom: 1px solid var(--line); margin-top: 20px; }
 .usage-chart span { flex: 1; background: #68bca4; min-width: 1px; border-radius: 2px 2px 0 0; }
+
+/* The monitor remains inside the resizable workspace panel. */
+.support-controls { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 16px; }
+.support-inbox { padding: 12px 16px; }
+.support-inbox .panel-link { display: flex; flex-direction: column; align-items: start; gap: 4px; }
+.support-inbox [aria-pressed="true"] { background: var(--surface-hover, #eef2f6); }
+.support-monitor { margin: 0 16px 20px; padding: 12px; border: 1px solid var(--border, #dfe3e8); border-radius: 10px; overflow: auto; max-height: 55vh; overflow-wrap: anywhere; }
+.support-monitor h4 { margin: 0 0 12px; }
+.support-monitor .user-message { margin-bottom: 14px; }

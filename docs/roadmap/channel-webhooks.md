@@ -37,7 +37,7 @@ Env: `TWILIO_AUTH_TOKEN`, `TWILIO_NUMBER_MAP`, `RUNNRR_TWILIO_SKIP_VERIFY` (non-
 
 ## Tests to write
 
-See `tests/test_channel_webhooks_contract.py` (skipped). Signature test uses a known-answer vector computed with stdlib hmac; no network.
+Proposed coverage (not implemented): `tests/test_channel_webhooks_contract.py`. Signature test uses a known-answer vector computed with stdlib hmac; no network.
 
 ## Out of scope
 

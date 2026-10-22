@@ -7,8 +7,8 @@
   <meta name="color-scheme" content="light">
   <title>Runnrr — Workstation</title>
   <link rel="icon" href="/vendor/icons/bolt.svg">
-  <link rel="stylesheet" href="/styles.css">
-  <script type="module" src="/app.mjs"></script>
+  <link rel="stylesheet" href="/css/styles.css">
+  <script type="module" src="/js/app.mjs"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to conversation</a>
@@ -19,7 +19,7 @@
       <div class="sidebar-controls"><label class="search-field"><img src="/vendor/icons/magnifying-glass.svg" alt=""><input id="sidebar-search" type="search" aria-label="Search threads" placeholder="Search"><kbd id="search-shortcut">⌘ K</kbd></label><button id="search-projects" class="icon-button" aria-label="Search projects" title="Search projects"><img src="/vendor/icons/folder.svg" alt=""></button><button id="add-project" class="icon-button" aria-label="Add project" title="Add project"><img src="/vendor/icons/folder-plus.svg" alt=""></button><button id="new-chat" class="icon-button" aria-label="New thread" title="New thread"><img src="/vendor/icons/pencil-square.svg" alt=""></button></div>
       <div id="sidebar-list" class="sidebar-list"><p class="sidebar-empty">Loading threads…</p></div>
       <div id="thread-shelves" class="thread-shelves"></div>
-      <footer class="sidebar-footer"><button id="workspace-settings" class="icon-button" aria-label="Settings" title="Settings"><img src="/vendor/icons/cog-6-tooth.svg" alt=""></button><span id="runtime-status" class="runtime-status" role="status">Connecting…</span><button id="session-info" class="icon-button" aria-label="About temporary threads" title="About this workspace"><img src="/vendor/icons/information-circle.svg" alt=""></button></footer>
+      <footer class="sidebar-footer"><button id="workspace-settings" class="icon-button" aria-label="Settings" title="Settings"><img src="/vendor/icons/cog-6-tooth.svg" alt=""></button><span id="runtime-status" class="runtime-status" role="status">Connecting…</span><button id="session-info" class="icon-button" aria-label="About saved threads" title="About this workspace"><img src="/vendor/icons/information-circle.svg" alt=""></button></footer>
     </aside>
     <main id="main" class="main" tabindex="-1">
       <header class="workspace-header"><button id="open-nav" class="icon-button" aria-label="Open sidebar" aria-controls="sidebar" aria-expanded="true"><img src="/vendor/icons/panel-left.svg" alt=""></button><div id="header-identity" class="header-identity"></div><div class="header-actions"><button id="thread-actions" class="icon-button" aria-label="Thread actions" title="Thread actions"><img src="/vendor/icons/ellipsis-horizontal.svg" alt=""></button><button id="panel-toggle" class="icon-button" aria-label="Toggle workspace panel" aria-controls="workspace-panel" aria-expanded="true" title="Workspace panel"><img src="/vendor/icons/panel-right.svg" alt=""></button></div></header>
@@ -40,7 +40,7 @@
                 <button id="send-button" class="send-button" type="submit" aria-label="Send message" disabled><img src="/vendor/icons/arrow-up.svg" alt=""></button>
               </div>
             </div>
-            <div class="composer-footer"><span>Threads stay here until you reload.</span><span id="turn-status" role="status">Enter to send · Shift Enter for a new line</span></div>
+            <div class="composer-footer"><span>Threads are saved on this runtime.</span><span id="turn-status" role="status">Enter to send · Shift Enter for a new line</span></div>
           </form>
         </section>
         <aside id="workspace-panel" class="workspace-panel" aria-label="Workspace panel">
@@ -53,8 +53,8 @@
   </div>
   <div id="thread-menu" class="thread-menu" popover aria-label="Thread actions"></div>
   <dialog id="rename-dialog"><form id="rename-form"><h2>Rename thread</h2><label for="thread-name">Thread name</label><input id="thread-name" maxlength="120" required autocomplete="off"><div class="dialog-actions"><button type="button" data-close-dialog="rename-dialog">Cancel</button><button class="primary-button" type="submit">Save name</button></div></form></dialog>
-  <dialog id="delete-dialog"><form id="delete-form"><h2>Delete this thread?</h2><p>This removes it from this temporary workspace. You can undo immediately afterward.</p><div class="dialog-actions"><button type="button" data-close-dialog="delete-dialog">Cancel</button><button class="danger-button" type="submit">Delete thread</button></div></form></dialog>
-  <dialog id="info-dialog"><form method="dialog"><h2>Your local workspace</h2><p>Threads, drafts, pins, and snooze times stay in this page until you reload or close it. Copy anything you want to keep.</p><p>Snoozing hides a thread until its wake time while this page is open. It does not schedule an assistant task. Settling puts a thread away without deleting it.</p><p>Runtime restarts and inactivity can also reset conversation context. Saved history is not available yet.</p><div class="dialog-actions"><button class="primary-button">Got it</button></div></form></dialog>
+  <dialog id="delete-dialog"><form id="delete-form"><h2>Delete this thread?</h2><p>This removes it from your saved workspace. You can undo immediately afterward.</p><div class="dialog-actions"><button type="button" data-close-dialog="delete-dialog">Cancel</button><button class="danger-button" type="submit">Delete thread</button></div></form></dialog>
+  <dialog id="info-dialog"><form method="dialog"><h2>Your local workspace</h2><p>Threads, drafts, pins, and snooze times are saved on this runtime and restored when you return with this browser.</p><p>Snoozing moves a thread to the Snoozed section until its wake time, then returns it to the main section—even if you were away. It does not schedule an assistant task. Settling puts a thread away without deleting it.</p><p>Completed conversation context survives runtime restarts. Interrupted responses are marked incomplete. Clearing browser storage loses your workspace key and access to saved threads.</p><div class="dialog-actions"><button class="primary-button">Got it</button></div></form></dialog>
   <dialog id="project-picker" class="project-picker" aria-labelledby="picker-heading">
     <div class="picker-search"><button id="picker-back" class="icon-button" aria-label="Go back"><img src="/vendor/icons/arrow-left.svg" alt=""></button><input id="picker-query" type="search" placeholder="Search…" aria-label="Search choices" autocomplete="off"><button class="icon-button" data-close-dialog="project-picker" aria-label="Close"><img src="/vendor/icons/x-mark.svg" alt=""></button></div>
     <h2 id="picker-heading">Choose an assistant</h2><div id="picker-results" class="picker-results"></div>
@@ -71,7 +71,7 @@
       <div class="dialog-actions"><button type="button" data-close-dialog="add-project-dialog">Cancel</button><button id="project-save" class="primary-button">Add project</button></div>
     </form>
   </dialog>
-  <dialog id="settings-dialog" aria-labelledby="settings-heading"><h2 id="settings-heading">Settings</h2><p>Projects are saved on this runtime. This browser’s workspace key keeps your added projects separate from other visitors. Clearing browser data loses access to them.</p><button id="manage-projects" class="settings-row">Projects &amp; knowledge<img src="/vendor/icons/chevron-right.svg" alt=""></button><button id="settings-assistants" class="settings-row">Assistants<img src="/vendor/icons/chevron-right.svg" alt=""></button><p>Threads stay temporary and clear when you reload.</p><div class="dialog-actions"><button class="primary-button" data-close-dialog="settings-dialog">Done</button></div></dialog>
+  <dialog id="settings-dialog" aria-labelledby="settings-heading"><h2 id="settings-heading">Settings</h2><p>Projects are saved on this runtime. This browser’s workspace key keeps your added projects separate from other visitors. Clearing browser data loses access to them.</p><button id="manage-projects" class="settings-row">Projects &amp; knowledge<img src="/vendor/icons/chevron-right.svg" alt=""></button><button id="settings-assistants" class="settings-row">Assistants<img src="/vendor/icons/chevron-right.svg" alt=""></button><p>Threads and conversation context are saved with your browser workspace key.</p><div class="dialog-actions"><button class="primary-button" data-close-dialog="settings-dialog">Done</button></div></dialog>
   <div id="toast" class="toast" role="status" hidden><span id="toast-message"></span><button id="undo-action" hidden>Undo</button></div>
   <noscript><p>Enable JavaScript to use the Runnrr workstation.</p></noscript>
 </body>

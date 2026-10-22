@@ -100,7 +100,7 @@ class TestGeminiCorrectness:
         end_turn and the user saw a half-answer with no signal.
         """
         from runnrr.providers.gemini_provider import GeminiProvider
-        from tests.test_providers import (
+        from tests.providers.test_providers import (
             FakeGeminiClient,
             _drain_gemini,
             _gemini_chunk,
@@ -116,7 +116,7 @@ class TestGeminiCorrectness:
     @pytest.mark.asyncio
     async def test_safety_finish_surfaces_an_error_event(self):
         from runnrr.providers.gemini_provider import GeminiProvider
-        from tests.test_providers import (
+        from tests.providers.test_providers import (
             FakeGeminiClient,
             _drain_gemini,
             _gemini_chunk,
@@ -131,7 +131,7 @@ class TestGeminiCorrectness:
     @pytest.mark.asyncio
     async def test_normal_finish_still_ends_the_turn(self):
         from runnrr.providers.gemini_provider import GeminiProvider
-        from tests.test_providers import (
+        from tests.providers.test_providers import (
             FakeGeminiClient,
             _drain_gemini,
             _gemini_chunk,
@@ -192,7 +192,7 @@ class TestToolUseStartParity:
         already correct.
         """
         from runnrr.providers.openai_compat_provider import OpenAICompatProvider
-        from tests.test_providers import (
+        from tests.providers.test_providers import (
             FakeOpenAIClient,
             _choice,
             _chunk,

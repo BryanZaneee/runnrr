@@ -1,4 +1,11 @@
 import {
+  toolSettingsPanel,
+  disabledTools,
+  setToolEnabled,
+} from "./tool-settings.mjs";
+import { createSupportDemo } from "./support-demo.mjs";
+import { createThreadStore } from "./thread-store.mjs";
+import {
   initProjects,
   projectState,
   workspaceHeaders,
@@ -60,6 +67,11 @@ const friendly = (name) =>
     get_project_context: "Read project context",
   })[name] || String(name).replaceAll("_", " ");
 const panels = {
+  support: {
+    title: "Support demo",
+    icon: "chat-bubble-left-right",
+    hint: "Watch simulated customer conversations",
+  },
   usage: {
     title: "Usage & costs",
     icon: "cpu-chip",
@@ -134,8 +146,18 @@ function toast(message, undo = null) {
   );
 }
 
+const threadStore = createThreadStore(api, (message) => toast(message));
+let threadsLoaded = false;
+function saveThreads() {
+  if (threadsLoaded && state.connected) {
+    for (const thread of state.sessions)
+      threadStore.save(thread).catch(() => {});
+  }
+}
+
 function setNavigation(open) {
   const mobile = window.innerWidth <= 760;
+  $("sidebar").inert = !open;
   $("sidebar").classList.toggle("is-open", open && mobile);
   document.body.classList.toggle("sidebar-collapsed", !open && !mobile);
   $("sidebar-backdrop").hidden = !(open && mobile);
@@ -153,8 +175,8 @@ function setPanel(panel) {
   state.panel = panel;
   renderPanel();
   if (panel === "usage") loadUsage();
-  if (panel) $("close-panel").focus();
-  else $("panel-toggle").focus();
+  if (panel) $("close-panel").focus({ preventScroll: true });
+  else $("panel-toggle").focus({ preventScroll: true });
 }
 
 const usageState = {
@@ -368,6 +390,7 @@ function renderPanel() {
     s = active(),
     detail = state.details.get(state.profileId);
   $("workspace-panel").hidden = !key;
+  $("workspace-panel").inert = !key;
   $("panel-toggle").setAttribute("aria-expanded", String(Boolean(key)));
   $("panel-toggle").classList.toggle("selected", Boolean(key));
   $("chat-column").inert = Boolean(key) && window.innerWidth <= 1100;
@@ -405,12 +428,31 @@ function renderPanel() {
   } else if (key === "assistants") {
     root.innerHTML = `<div class="panel-intro"><p>Choose an assistant for a new thread.</p></div>${state.profiles.map((a) => `<button class="assistant-option ${a.id === state.profileId ? "selected" : ""}" data-profile="${escape(a.id)}">${avatar(a)}<span><strong>${escape(a.label)}</strong><span>${escape(a.description)}</span></span>${a.id === state.profileId ? icon("check") : ""}</button>`).join("")}${!state.profiles.length ? empty("squares-2x2", "No assistants configured", "Reconnect to load your assistants.") : '<p class="panel-note">Assistant creation and editing are not available yet.</p>'}`;
   } else if (key === "tools") {
+    const knowledgeId = projectState.items.find(
+      (project) => project.id === s?.projectId,
+    )?.knowledge_profile;
+    const toolProfile =
+      state.profiles.find((profile) => profile.id === knowledgeId) || p;
     const tools = [
-        ...(p?.tools || []),
-        ...(s?.projectId ? ["search_project", "read_project_file"] : []),
+        ...(toolProfile?.tools || []),
+        ...(s?.projectId &&
+        !projectState.items.find((p) => p.id === s.projectId)?.knowledge_profile
+          ? ["search_project", "read_project_file"]
+          : []),
       ],
       skills = detail?.skills || [];
-    root.innerHTML = `<div class="panel-intro"><h3>${escape(p?.label || "Assistant")}</h3><p>Abilities available to this assistant.</p></div><p class="group-label">Tools · ${tools.length}</p>${tools.map((name) => `<details class="capability"><summary>${icon("puzzle-piece")}<span>${escape(friendly(name))}</span>${icon("chevron-down")}</summary><p>${escape(detail?.tool_schemas?.find((t) => t.name === name)?.description || state.tools.find((t) => t.name === name)?.description || "Available to this assistant.")}</p></details>`).join("")}<p class="group-label">Skills · ${skills.length}</p>${skills.map((skill) => `<details class="capability"><summary>${icon("document-text")}<span>${escape(skill.name)}</span>${icon("chevron-down")}</summary><p>${escape(skill.description)}</p></details>`).join("") || '<p class="panel-note">No saved skills for this assistant.</p>'}<p class="panel-note">These abilities are configured for the assistant. Editing them is not available yet.</p>`;
+    root.innerHTML = toolSettingsPanel(
+      tools,
+      state.tools,
+      skills,
+      Boolean(s?.busy),
+    );
+    root.querySelectorAll("[data-tool-setting]").forEach((input) => {
+      input.onchange = () =>
+        setToolEnabled(input.dataset.toolSetting, input.checked);
+    });
+  } else if (key === "support") {
+    supportDemo.render(root);
   } else if (key === "knowledge") {
     const project = projectState.items.find((p) => p.id === s?.projectId);
     const hasKnowledge =
@@ -426,7 +468,7 @@ function renderPanel() {
         ].includes(t),
       );
     const documents = sources.filter((i) => !safeUrl(i.url));
-    root.innerHTML = `${project ? `<div class="panel-intro"><h3>${escape(project.name)}</h3><p>${project.file_count} project files available to this assistant.</p><p>Updated ${escape(new Date(project.updated * 1000).toLocaleString())}</p></div>` : ""}<div class="panel-intro"><h3>${hasKnowledge ? "Your assistant’s knowledge" : "No documents connected"}</h3><p>${hasKnowledge ? "This assistant can consult its configured documents when you ask a question." : "This assistant currently works without a document collection."}</p></div>${documents.length ? `<p class="group-label">Referenced in this thread</p><div class="panel-sources">${documents.map(sourceChip).join("")}</div>` : empty("document-text", "No documents referenced yet", "Documents used in a response will appear here.")}<p class="panel-note">${projectState.mode === "portfolio" ? "Choose a portfolio project when starting a thread. Its public website and GitHub documents are ready to explore." : "Use Add project to import a folder of text files or a public GitHub repository."}</p>`;
+    root.innerHTML = `${project ? `<div class="panel-intro"><h3>${escape(project.name)}</h3><p>${project.file_count} project files available to this assistant.</p><p>${project.knowledge_profile ? "Local knowledge · search, retrieve, and cite" : "Updated " + escape(new Date(project.updated * 1000).toLocaleString())}</p></div>` : ""}<div class="panel-intro"><h3>${hasKnowledge ? "Your assistant’s knowledge" : "No documents connected"}</h3><p>${hasKnowledge ? "This assistant can consult its configured documents when you ask a question." : "This assistant currently works without a document collection."}</p></div>${documents.length ? `<p class="group-label">Referenced in this thread</p><div class="panel-sources">${documents.map(sourceChip).join("")}</div>` : empty("document-text", "No documents referenced yet", "Documents used in a response will appear here.")}<p class="panel-note">${projectState.mode === "portfolio" ? "Choose a portfolio project when starting a thread. Its public website and GitHub documents are ready to explore." : "Use Add project to import a folder of text files or a public GitHub repository."}</p>`;
   } else if (key === "sources") {
     root.innerHTML = sources.length
       ? `<div class="panel-intro"><p>References used in this conversation.</p></div><div class="panel-sources">${sources.map(sourceChip).join("")}</div>`
@@ -456,7 +498,7 @@ function renderPanel() {
         );
   } else if (key === "details") {
     const tokens = (s?.turns || []).reduce((sum, t) => sum + t.tokens, 0);
-    root.innerHTML = `<div class="panel-intro"><h3>${escape(s?.title || "New thread")}</h3><p>A little context for this conversation.</p></div><dl class="thread-details"><dt>Assistant</dt><dd>${escape(p?.label || "None")}</dd><dt>Model</dt><dd>${escape(state.models.find((m) => m.id === s?.model)?.label || "Not configured")}</dd><dt>Status</dt><dd>${s?.busy ? "Working" : s?.failed ? "Needs attention" : "Ready"}</dd><dt>Messages sent</dt><dd>${s?.turns.length || 0}</dd><dt>Tokens${s?.turns.some((t) => t.estimated) ? " (estimated)" : ""}</dt><dd>${tokens.toLocaleString()}</dd><dt>History</dt><dd>Temporary · this page only</dd></dl>${threadUsage(s?.turns || [])}<button class="panel-link" data-about>About temporary threads ${icon("chevron-right")}</button>`;
+    root.innerHTML = `<div class="panel-intro"><h3>${escape(s?.title || "New thread")}</h3><p>A little context for this conversation.</p></div><dl class="thread-details"><dt>Assistant</dt><dd>${escape(p?.label || "None")}</dd><dt>Model</dt><dd>${escape(state.models.find((m) => m.id === s?.model)?.label || "Not configured")}</dd><dt>Status</dt><dd>${s?.busy ? "Working" : s?.failed ? "Needs attention" : "Ready"}</dd><dt>Messages sent</dt><dd>${s?.turns.length || 0}</dd><dt>Tokens${s?.turns.some((t) => t.estimated) ? " (estimated)" : ""}</dt><dd>${tokens.toLocaleString()}</dd><dt>History</dt><dd>Saved on this runtime</dd></dl>${threadUsage(s?.turns || [])}<button class="panel-link" data-about>About saved threads ${icon("chevron-right")}</button>`;
   }
 }
 
@@ -554,6 +596,7 @@ function renderComposer() {
 }
 
 function render() {
+  saveThreads();
   renderSidebar();
   renderHeader();
   renderChat();
@@ -588,13 +631,16 @@ function streamRender() {
     renderPending = false;
     renderHeader();
     renderChat();
-    if (["activity", "sources", "details", "knowledge"].includes(state.panel))
+    if (
+      ["activity", "sources", "details", "knowledge", "support"].includes(
+        state.panel,
+      )
+    )
       renderPanel();
   });
 }
 
-async function sendMessage() {
-  const session = active();
+async function sendMessage(session = active(), signal) {
   if (
     !session ||
     session.busy ||
@@ -624,8 +670,10 @@ async function sendMessage() {
   render();
   $("transcript").scrollTop = $("transcript").scrollHeight;
   try {
+    await threadStore.save(session);
     const res = await fetch(apiURL("/api/chat"), {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json", ...workspaceHeaders() },
       body: JSON.stringify({
         session_id: session.id,
@@ -633,6 +681,7 @@ async function sendMessage() {
         model: session.model,
         profile: session.profileId,
         project_id: session.projectId || null,
+        disabled_tools: disabledTools(),
       }),
     });
     if (!res.ok || !res.body) {
@@ -651,15 +700,18 @@ async function sendMessage() {
     await readEvents(res.body, (event, data) => {
       applyEvent(turn, event, data);
       if (session.id === state.activeId) streamRender();
+      else if (state.panel === "support") renderPanel();
     });
     if (!turn.finished)
       throw new Error("The connection ended before the assistant finished.");
   } catch (error) {
     applyEvent(turn, "error", {
       message:
-        error instanceof TypeError
-          ? "The connection to the runtime was lost."
-          : error.message,
+        error.name === "AbortError"
+          ? "Demo run stopped. This response may be incomplete."
+          : error instanceof TypeError
+            ? "The connection to the runtime was lost."
+            : error.message,
     });
   } finally {
     session.busy = false;
@@ -672,6 +724,8 @@ async function sendMessage() {
       renderPanel();
     }
   }
+  if (state.panel === "support") renderPanel();
+  return !session.failed;
 }
 
 function advanceThread() {
@@ -751,6 +805,13 @@ async function connect() {
     $("connection-message").textContent = !state.profiles.length
       ? "No assistants are configured in this runtime."
       : "No model provider is configured. Connect one in your runtime settings.";
+    if (!threadsLoaded) {
+      state.sessions = await threadStore.load();
+      threadsLoaded = true;
+      wakeThreads(state.sessions);
+      const first = state.sessions.find((s) => !s.settled && !s.snoozedUntil);
+      if (first) selectThread(first.id);
+    }
     if (!active() && profile()) newChat();
     // An empty thread created before provider setup can now use the configured model.
     if (active() && !active().model && !active().turns.length)
@@ -842,7 +903,10 @@ $("composer-form").onsubmit = (event) => {
   event.preventDefault();
   sendMessage();
 };
+let draftSaveTimer;
 $("composer-input").oninput = (event) => {
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(saveThreads, 350);
   if (active()) active().draft = event.target.value;
   resizeComposer();
   renderComposer();
@@ -877,11 +941,17 @@ $("rename-form").onsubmit = (event) => {
   $("rename-dialog").close();
   render();
 };
-$("delete-form").onsubmit = (event) => {
+$("delete-form").onsubmit = async (event) => {
   event.preventDefault();
   const index = state.sessions.findIndex((s) => s.id === menuThreadId),
     s = state.sessions[index];
   if (!s || s.busy) return;
+  try {
+    await threadStore.remove(s);
+  } catch (error) {
+    toast(error.message);
+    return;
+  }
   state.sessions.splice(index, 1);
   $("delete-dialog").close();
   if (state.activeId === s.id) advanceThread();
@@ -896,6 +966,9 @@ window.addEventListener("resize", () => {
   $("sidebar").classList.remove("is-open");
   $("sidebar-backdrop").hidden = true;
   $("main").inert = false;
+  $("sidebar").inert =
+    window.innerWidth <= 760 ||
+    document.body.classList.contains("sidebar-collapsed");
   $("open-nav").setAttribute(
     "aria-expanded",
     String(
@@ -1015,10 +1088,29 @@ setInterval(() => {
   if (wakeThreads(state.sessions)) {
     renderSidebar();
     renderComposer();
+    saveThreads();
   }
 }, 1000);
 if (!/Mac|iPhone|iPad/.test(navigator.platform))
   $("search-shortcut").textContent = "Ctrl K";
+const supportDemo = createSupportDemo({
+  available: () => state.connected && Boolean(state.model),
+  create: (title, prompt) => {
+    const thread = createThread("customer-service", state.model);
+    thread.projectId = null;
+    thread.title = title;
+    thread.draft = prompt;
+    state.sessions.unshift(thread);
+    return thread;
+  },
+  send: sendMessage,
+  refresh: () => {
+    if (state.panel === "support") renderPanel();
+    renderSidebar();
+  },
+  escape,
+  openThread: selectThread,
+});
 const projectUI = initProjects({
   api,
   profiles: () => state.profiles,
@@ -1031,4 +1123,5 @@ const projectUI = initProjects({
   icon,
   toast,
 });
+$("sidebar").inert = window.innerWidth <= 760;
 connect();

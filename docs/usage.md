@@ -62,7 +62,7 @@ unpriced. Partial reports can still understate known costs.
 idempotent record per turn: numeric usage/timing, UTC start time, model, provider,
 profile, status and a session-ID hash for distinct counts. It stores **no prompts,
 responses, reasoning text, tool arguments/results, IPs or raw session IDs**.
-Transcripts and thread organization remain temporary. Back up this file to keep
+Transcripts and thread organization are saved separately in `data/sessions.sqlite3`. Back up this file to keep
 usage history across host migrations; deleting a page-local thread does not
 delete its accounting record. No automatic retention cleanup runs.
 
@@ -81,8 +81,8 @@ current unfinalized turn; budget reservations remain the separate spending guard
 
 ## Verification
 
-Run `.venv/bin/python -m pytest -q` and `node tests/workstation.mjs`.
-Evaluate `tests/usage-browser.mjs` on the running workstation for synthetic chat,
+Run `.venv/bin/python -m pytest -q` and `node tests/unit/workstation.mjs`.
+Evaluate `tests/browser/usage-browser.mjs` on the running workstation for synthetic chat,
 history, filtering, escaping and failure checks. It mocks chat requests, uses an
 isolated frame, and removes it afterward. Reload cached frontend assets before
 browser checks after edits.

@@ -11,10 +11,12 @@
     "semantic_search_kb",
     "get_resume_summary",
     "get_project_context",
-    "web_search"
+    "web_search",
+    "fetch_url_text",
+    "calculator"
   ],
   "tool_descriptions": {
-    "get_resume_summary": "Return Bryan's resume in markdown. Use for any question about employment history, education, certifications, or overall qualifications \u2014 faster than read_file('resume/resume.md').",
+    "get_resume_summary": "Return Bryan's resume in markdown. Use for any question about employment history, education, certifications, or overall qualifications — faster than read_file('resume/resume.md').",
     "get_project_context": "Read maintainer notes and the latest public website/GitHub snapshot for a named project. Use for current product features, stack, and project relevance; cite the dated source and do not infer personal contributions from repository activity."
   },
   "project_aliases": {
@@ -30,7 +32,7 @@
     "esmebelle": "esme",
     "esmebelle.studio": "esme",
     "esme belle": "esme",
-    "esm\u00e9 belle": "esme",
+    "esmé belle": "esme",
     "ayopapo.studio": "ayopapo",
     "ayo papo": "ayopapo",
     "papo": "ayopapo",

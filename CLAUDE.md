@@ -9,11 +9,13 @@ research, and other work beyond coding. FastAPI serves a vanilla HTML/CSS/JS UI.
 The runtime uses provider APIs, with live SSE chat, configured profiles, knowledge
 and web tools, skills, project imports, and persistent usage accounting.
 
-Chats, drafts, pins, and snoozes are temporary. Snooze only changes sidebar state
-while the page is open; it does not schedule work. Authentication, durable chats,
-write approvals, writable agent workspaces, connected MCP clients, and installed
-agent harnesses are future work. Never simulate success for an unavailable action
-or persist transcripts in the browser before backend durability exists.
+The core product is a polished portfolio demo for employers. The support proof
+of concept uses simulated customers with real model responses and a monitoring
+panel; it does not send to external inboxes. Threads and provider context persist
+in SQLite. Snooze only moves a thread between sidebar sections; settle keeps it
+in the settled section until restored. Neither schedules work. Dark Souls
+project knowledge uses the existing local retrieval tools with optional web search.
+Never simulate success for an unavailable action.
 
 Read [README.md](README.md) for setup, [docs/roadmap/README.md](docs/roadmap/README.md)
 for current priorities, and [history.md](history.md) for decisions. Plans in
@@ -60,7 +62,9 @@ RAG and eval commands are documented in [docs/guide.md](docs/guide.md).
   deprecated `tool_hops` alias.
 - Skill bodies arrive as tool results, never mid-conversation system rewrites
   that invalidate the prompt cache. MCP configuration is parsed but not connected.
-- Sessions remain process-local: deploy one uvicorn worker. Busy sessions cannot
+- Active session locks remain process-local: deploy one uvicorn worker.
+  Workspace threads and completed provider context persist in SQLite; legacy
+  clients without a workspace header remain temporary. Busy sessions cannot
   expire or accept another request. Budgets use durable SQLite UTC-day reservations.
 - Profile edits remain gated by `ENABLE_PROFILE_EDITOR=0` by default. Preserve
   owner-token checks, tool allowlists, note/profile caps, and path containment.
